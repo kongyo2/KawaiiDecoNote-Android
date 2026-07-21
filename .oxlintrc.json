@@ -1,0 +1,28 @@
+{
+  "plugins": ["typescript", "import", "promise", "node", "react"],
+  "categories": {
+    "correctness": "error",
+    "suspicious": "warn",
+    "perf": "warn",
+    "style": "off",
+    "pedantic": "off"
+  },
+  "rules": {
+    "no-console": "off",
+    "react/react-in-jsx-scope": "off",
+    "react/style-prop-object": "off",
+    "react/no-unstable-nested-components": ["warn", { "allowAsProps": true }]
+  },
+  "ignorePatterns": [
+    "node_modules",
+    "dist",
+    "build",
+    "coverage",
+    "*.min.js",
+    "android",
+    "ios",
+    ".expo",
+    "assets",
+    "expo-env.d.ts"
+  ]
+}

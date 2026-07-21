@@ -1,0 +1,51 @@
+{
+  "expo": {
+    "name": "かわいくデコれる手帳",
+    "slug": "kawaii-deconote",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "scheme": "kawaiideconote",
+    "userInterfaceStyle": "light",
+    "backgroundColor": "#FBF7F2",
+    "newArchEnabled": true,
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "io.github.pppzet.kawaiideconote"
+    },
+    "android": {
+      "package": "io.github.pppzet.kawaiideconote",
+      "versionCode": 1,
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#F3E9F7"
+      },
+      "edgeToEdgeEnabled": true,
+      "predictiveBackGestureEnabled": false
+    },
+    "plugins": [
+      "expo-router",
+      "expo-sqlite",
+      "expo-font",
+      "expo-asset",
+      [
+        "expo-splash-screen",
+        {
+          "backgroundColor": "#FBF7F2",
+          "image": "./assets/splash-icon.png",
+          "imageWidth": 200
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "手帳に貼る写真を選ぶためにフォトライブラリを使います。"
+        }
+      ]
+    ],
+    "extra": {
+      "router": {}
+    },
+    "owner": "pppzet"
+  }
+}

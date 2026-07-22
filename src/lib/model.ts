@@ -10,6 +10,7 @@ import type {
   Page,
   PageType,
   Photo,
+  Placement,
   RuleStyle,
   Shape,
   Step,
@@ -215,14 +216,21 @@ function normalizeStep(raw: unknown): Step {
   return { id: str(r.id) || newId(), type: "step", text: str(r.text), done: bool(r.done) };
 }
 
-function normalizeSticker(raw: unknown): Sticker {
-  const r = rec(raw);
+// ステッカー・シェイプ・写真に共通する配置情報（id と座標・回転）を正規化する。
+function normalizePlacement(r: Record<string, unknown>): Placement {
   return {
     id: str(r.id) || newId(),
-    type: oneOf<StickerType>(r.type, STICKER_TYPES, "star"),
     x: clampNum(r.x, 0, 0, MAX_POSITION),
     y: clampNum(r.y, 0, 0, MAX_POSITION),
     rot: num(r.rot),
+  };
+}
+
+function normalizeSticker(raw: unknown): Sticker {
+  const r = rec(raw);
+  return {
+    ...normalizePlacement(r),
+    type: oneOf<StickerType>(r.type, STICKER_TYPES, "star"),
     size: clampNum(r.size, STICKER_DEFAULT_SIZE, STICKER_MIN_SIZE, STICKER_MAX_SIZE),
   };
 }
@@ -230,12 +238,9 @@ function normalizeSticker(raw: unknown): Sticker {
 function normalizeShape(raw: unknown): Shape {
   const r = rec(raw);
   return {
-    id: str(r.id) || newId(),
+    ...normalizePlacement(r),
     text: str(r.text),
-    x: clampNum(r.x, 0, 0, MAX_POSITION),
-    y: clampNum(r.y, 0, 0, MAX_POSITION),
     w: clampNum(r.w, SHAPE_DEFAULT_WIDTH, SHAPE_MIN_WIDTH, SHAPE_MAX_WIDTH),
-    rot: num(r.rot),
   };
 }
 
@@ -244,11 +249,8 @@ function normalizePhoto(raw: unknown): Photo | null {
   const dataUrl = str(r.dataUrl) || str(r.image);
   if (!/^data:image\//i.test(dataUrl)) return null;
   return {
-    id: str(r.id) || newId(),
-    x: clampNum(r.x, 0, 0, MAX_POSITION),
-    y: clampNum(r.y, 0, 0, MAX_POSITION),
+    ...normalizePlacement(r),
     w: clampNum(r.w, PHOTO_DEFAULT_WIDTH, PHOTO_MIN_WIDTH, PHOTO_MAX_WIDTH),
-    rot: num(r.rot),
     dataUrl,
   };
 }

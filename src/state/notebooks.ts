@@ -251,13 +251,18 @@ export const useNotebooks = create<NotebooksState>()((set, get) => {
         { undoable: false },
       ),
 
-    // 存在しないページIDは無視（削除ボタンのタップが親タブに伝わって
-    // 消したページを選び直してしまう事故を防ぐ）
-    setActivePage: (id) =>
+    // 実際にページが変わるときだけコミットする。すでに選択中／存在しないID
+    // （削除ボタンのタップが親タブに伝わったケース等）では何もしない。
+    // 無駄なコミットで undo 履歴が消える／消したページを選び直す事故を防ぐ。
+    setActivePage: (id) => {
+      const doc = get().doc;
+      const nb = doc.notebooks.find((n) => n.id === doc.activeNotebookId);
+      if (!nb || nb.activePageId === id || !nb.pages.some((p) => p.id === id)) return;
       commit(
-        mapActiveNotebook((nb) => (nb.pages.some((p) => p.id === id) ? { ...nb, activePageId: id } : nb)),
+        mapActiveNotebook((n) => ({ ...n, activePageId: id })),
         { undoable: false },
-      ),
+      );
+    },
 
     deletePage: (id) => {
       const doc = get().doc;
@@ -477,7 +482,10 @@ export const useNotebooks = create<NotebooksState>()((set, get) => {
     addArrow: (from, to) =>
       commit(
         mapActivePage((pg) => {
-          if (from === to || pg.arrows.some((a) => a.from === from && a.to === to)) return pg;
+          // 両端のテキストが実在するときだけ線を張る（undo/リセットで消えたカードを
+          // 指したまま接続すると、見えない線がデータに残るのを防ぐ）
+          const bothExist = pg.shapes.some((s) => s.id === from) && pg.shapes.some((s) => s.id === to);
+          if (from === to || !bothExist || pg.arrows.some((a) => a.from === from && a.to === to)) return pg;
           return {
             ...pg,
             arrows: [...pg.arrows, { id: newId(), from, to, manual: false, mx: 0, my: 0, length: 0, angle: 0 }],

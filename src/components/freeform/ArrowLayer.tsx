@@ -47,6 +47,9 @@ function ArrowItem({ arrow, geo, selected }: { arrow: Arrow; geo: Geo; selected:
       onPress={() => select(arrow.id)}
       style={[
         styles.wrap,
+        // 未選択の線はカードより下（描画順で背面）に置き、カードのタップを奪わない。
+        // 選択中だけ前面に出して、端の削除/戻すボタンを押せるようにする。
+        selected ? styles.wrapSelected : null,
         { left: geo.mx - len / 2, top: geo.my - 11, width: len, transform: [{ rotate: `${geo.angle}deg` }] },
       ]}
     >
@@ -93,7 +96,9 @@ const styles = StyleSheet.create({
     position: "absolute",
     height: 22,
     justifyContent: "center",
-    zIndex: 1,
+  },
+  wrapSelected: {
+    zIndex: 3,
   },
   line: {
     position: "absolute",

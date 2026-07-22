@@ -114,6 +114,8 @@ export default function NotebookEditor() {
   };
   const onUndo = () => {
     undo();
+    // undoでカード等が消えたときに、選択やつなぎ線モードの参照が宙に浮かないよう解除
+    useUi.getState().resetBoardUi();
     showToast("↩️ ひとつ前に戻しました");
   };
   const onScreenshot = async () => {
@@ -161,7 +163,14 @@ export default function NotebookEditor() {
   const onReset = () => {
     Alert.alert("ページを消去", "このページの中身を全部消します。よろしいですか？", [
       { text: "やめる", style: "cancel" },
-      { text: "消去", style: "destructive", onPress: resetPage },
+      {
+        text: "消去",
+        style: "destructive",
+        onPress: () => {
+          resetPage();
+          useUi.getState().resetBoardUi();
+        },
+      },
     ]);
   };
   const onDeletePage = (pageId: string) => {

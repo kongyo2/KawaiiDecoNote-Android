@@ -39,6 +39,13 @@ interface TransformableProps {
 
 const HANDLE = 26;
 
+/** hex色に約33%の透明度を足す。3桁hex(#rgb)は6桁に伸ばしてから付ける（#555+55=#55555 の不正色を防ぐ） */
+function tintWithAlpha(hex: string): string {
+  const short = /^#([0-9a-fA-F])([0-9a-fA-F])([0-9a-fA-F])$/.exec(hex);
+  const base = short ? `#${short[1]}${short[1]}${short[2]}${short[2]}${short[3]}${short[3]}` : hex;
+  return `${base}55`;
+}
+
 export function Transformable({
   x,
   y,
@@ -159,7 +166,7 @@ export function Transformable({
 
       {showDragHandle ? (
         <GestureDetector gesture={drag}>
-          <View style={[styles.grip, { backgroundColor: `${handleTint}55` }]}>
+          <View style={[styles.grip, { backgroundColor: tintWithAlpha(handleTint) }]}>
             <Text style={[styles.gripText, { color: handleTint }]}>⠿</Text>
           </View>
         </GestureDetector>

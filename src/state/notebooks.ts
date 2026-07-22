@@ -138,6 +138,11 @@ export const useNotebooks = create<NotebooksState>()((set, get) => {
   const commit = (doc: AppState, opts?: CommitOpts): void => {
     const immediate = opts?.immediate ?? true;
     const undoable = opts?.undoable ?? true;
+    // 直前のデバウンス編集（タイトルやカードのテキスト入力）が未確定のまま、
+    // 別の即時アクション（削除など）が来たら、先にその編集を確定させておく。
+    // こうすると undo の復元先が「このアクションの直前（入力を含む）」になり、
+    // 消す直前に打った文字が失われない。連続テキスト入力は immediate:false なので巻き込まない。
+    if (immediate && dirty) flushSave(true);
     set({ doc });
     dirty = true;
     if (immediate) flushSave(undoable);

@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { Image, StyleSheet } from "react-native";
+import type { LayoutChangeEvent } from "react-native";
 import { useNotebooks } from "@/state/notebooks";
 import type { Photo } from "@/lib/types";
 import { Transformable } from "@/components/transform/Transformable";
@@ -7,7 +8,17 @@ import type { TransformPatch } from "@/components/transform/Transformable";
 
 const CHIC_HANDLE = "#555";
 
-export function PhotoCard({ photo, selected, onSelect }: { photo: Photo; selected: boolean; onSelect: () => void }) {
+export function PhotoCard({
+  photo,
+  selected,
+  onSelect,
+  onMeasureHeight,
+}: {
+  photo: Photo;
+  selected: boolean;
+  onSelect: () => void;
+  onMeasureHeight: (id: string, height: number) => void;
+}) {
   const updatePhoto = useNotebooks((s) => s.updatePhoto);
   const deletePhoto = useNotebooks((s) => s.deletePhoto);
   const [ratio, setRatio] = useState(1);
@@ -43,7 +54,12 @@ export function PhotoCard({ photo, selected, onSelect }: { photo: Photo; selecte
       onChange={onChange}
       onDelete={() => deletePhoto(photo.id)}
     >
-      <Image source={{ uri: photo.dataUrl }} style={[styles.img, { aspectRatio: ratio }]} resizeMode="cover" />
+      <Image
+        source={{ uri: photo.dataUrl }}
+        style={[styles.img, { aspectRatio: ratio }]}
+        resizeMode="cover"
+        onLayout={(e: LayoutChangeEvent) => onMeasureHeight(photo.id, e.nativeEvent.layout.height)}
+      />
     </Transformable>
   );
 }

@@ -7,7 +7,7 @@ import { Stack } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import { StatusBar } from "expo-status-bar";
 import { useEffect, useState } from "react";
-import { StyleSheet, View } from "react-native";
+import { AppState, StyleSheet, View } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { ReduceMotion, ReducedMotionConfig } from "react-native-reanimated";
 import { SafeAreaProvider } from "react-native-safe-area-context";
@@ -33,6 +33,21 @@ export default function RootLayout() {
   useEffect(() => {
     useNotebooks.getState().initialize();
     setInitialized(true);
+  }, []);
+
+  // アプリがバックグラウンドへ回るとき、デバウンス中の未保存編集を確定させる
+  // （Web版の visibilitychange / pagehide 相当。強制終了前の入力ロストを防ぐ）
+  useEffect(() => {
+    const sub = AppState.addEventListener("change", (state) => {
+      if (state !== "active") useNotebooks.getState().flushPending();
+    });
+    return () => sub.remove();
+  }, []);
+
+  // 保存が一時的に失敗しても、定期的に再保存を試みる（Web版の8秒ごとフラッシュ相当）
+  useEffect(() => {
+    const id = setInterval(() => useNotebooks.getState().flushPending(), 8000);
+    return () => clearInterval(id);
   }, []);
 
   useEffect(() => {

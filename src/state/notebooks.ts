@@ -24,6 +24,7 @@ interface NotebooksState {
 
   initialize: () => void;
   recheckStorage: () => void;
+  flushPending: () => void;
   undo: () => void;
   importState: (state: AppState) => void;
 
@@ -95,19 +96,23 @@ export const useNotebooks = create<NotebooksState>()((set, get) => {
   let lastCommitted: string | null = null;
   let undoStack: string[] = [];
 
-  const flushSave = (): void => {
+  const flushSave = (undoable = true): void => {
     if (saveTimer) {
       clearTimeout(saveTimer);
       saveTimer = null;
     }
     if (!dirty) return;
-    dirty = false;
     const doc = get().doc;
     const snapshot = JSON.stringify(doc);
     try {
       saveState(doc);
+      // 書き込みが成功したときにだけ dirty をおろす。失敗時は true のままにして、
+      // 次の編集・アプリ復帰・定期リトライで再保存を試みる（保存失敗でも変更を失わない）。
+      dirty = false;
       if (!get().storageOk) set({ storageOk: true, storageError: "" });
-      if (lastCommitted !== null && lastCommitted !== snapshot) {
+      // ナビゲーションだけの変更（手帳の開閉・ページ切替・作成/削除）はundo対象にしない。
+      // undoで表示中のルートと state がずれて「見つかりません」に落ちるのを防ぐ。
+      if (undoable && lastCommitted !== null && lastCommitted !== snapshot) {
         undoStack.push(lastCommitted);
         if (undoStack.length > MAX_UNDO) undoStack.shift();
         set({ canUndo: true });
@@ -122,18 +127,28 @@ export const useNotebooks = create<NotebooksState>()((set, get) => {
   const scheduleSave = (): void => {
     dirty = true;
     if (saveTimer) clearTimeout(saveTimer);
-    saveTimer = setTimeout(flushSave, 400);
+    saveTimer = setTimeout(() => flushSave(true), 400);
   };
 
-  const saveNow = (): void => {
-    dirty = true;
-    flushSave();
-  };
+  interface CommitOpts {
+    immediate?: boolean;
+    undoable?: boolean;
+  }
 
-  const commit = (doc: AppState, immediate = true): void => {
+  const commit = (doc: AppState, opts?: CommitOpts): void => {
+    const immediate = opts?.immediate ?? true;
+    const undoable = opts?.undoable ?? true;
+    // undo対象外の変更の前に、保留中のテキスト編集を先にundo可能として確定しておく
+    if (!undoable && dirty) flushSave(true);
     set({ doc });
-    if (immediate) saveNow();
+    dirty = true;
+    if (immediate) flushSave(undoable);
     else scheduleSave();
+  };
+
+  /** 保留中の未保存編集を強制的に書き出す（アプリのバックグラウンド化・定期リトライ用） */
+  const flushPending = (): void => {
+    if (dirty) flushSave(true);
   };
 
   const mapActiveNotebook = (fn: (nb: Notebook) => Notebook): AppState => {
@@ -171,34 +186,44 @@ export const useNotebooks = create<NotebooksState>()((set, get) => {
     undo: () => {
       const prev = undoStack.pop();
       if (prev === undefined) return;
-      const doc = JSON.parse(prev) as AppState;
-      lastCommitted = prev;
-      set({ doc, canUndo: undoStack.length > 0 });
-      saveNow();
+      const restored = JSON.parse(prev) as AppState;
+      // どの手帳を開いているか（ルーター主導のナビゲーション）はundoで変えない
+      restored.activeNotebookId = get().doc.activeNotebookId;
+      lastCommitted = JSON.stringify(restored);
+      set({ doc: restored, canUndo: undoStack.length > 0 });
+      dirty = true;
+      flushSave(false);
     },
 
     importState: (state) => {
       lastCommitted = JSON.stringify(state);
       undoStack = [];
       set({ doc: state, canUndo: false });
-      saveNow();
+      dirty = true;
+      flushSave(false);
     },
+
+    flushPending,
 
     /* ---------------- 手帳 ---------------- */
 
+    // 手帳の作成・削除・開閉・ページ切替はナビゲーション操作。undo対象にしない。
     createNotebook: (type, name, color) => {
       const nb = newNotebook(type, name, color);
       const doc = get().doc;
-      commit({ activeNotebookId: nb.id, notebooks: [...doc.notebooks, nb] });
+      commit({ activeNotebookId: nb.id, notebooks: [...doc.notebooks, nb] }, { undoable: false });
       return nb.id;
     },
 
     deleteNotebook: (id) => {
       const doc = get().doc;
-      commit({
-        activeNotebookId: doc.activeNotebookId === id ? null : doc.activeNotebookId,
-        notebooks: doc.notebooks.filter((nb) => nb.id !== id),
-      });
+      commit(
+        {
+          activeNotebookId: doc.activeNotebookId === id ? null : doc.activeNotebookId,
+          notebooks: doc.notebooks.filter((nb) => nb.id !== id),
+        },
+        { undoable: false },
+      );
     },
 
     renameNotebook: (id, name) => {
@@ -206,8 +231,8 @@ export const useNotebooks = create<NotebooksState>()((set, get) => {
       commit({ ...doc, notebooks: doc.notebooks.map((nb) => (nb.id === id ? { ...nb, name } : nb)) });
     },
 
-    openNotebook: (id) => commit({ ...get().doc, activeNotebookId: id }),
-    closeNotebook: () => commit({ ...get().doc, activeNotebookId: null }),
+    openNotebook: (id) => commit({ ...get().doc, activeNotebookId: id }, { undoable: false }),
+    closeNotebook: () => commit({ ...get().doc, activeNotebookId: null }, { undoable: false }),
 
     /* ---------------- ページ ---------------- */
 
@@ -217,9 +242,16 @@ export const useNotebooks = create<NotebooksState>()((set, get) => {
           const page = newPage(type, "");
           return { ...nb, pages: [...nb.pages, page], activePageId: page.id };
         }),
+        { undoable: false },
       ),
 
-    setActivePage: (id) => commit(mapActiveNotebook((nb) => ({ ...nb, activePageId: id }))),
+    // 存在しないページIDは無視（削除ボタンのタップが親タブに伝わって
+    // 消したページを選び直してしまう事故を防ぐ）
+    setActivePage: (id) =>
+      commit(
+        mapActiveNotebook((nb) => (nb.pages.some((p) => p.id === id) ? { ...nb, activePageId: id } : nb)),
+        { undoable: false },
+      ),
 
     deletePage: (id) => {
       const doc = get().doc;
@@ -242,7 +274,7 @@ export const useNotebooks = create<NotebooksState>()((set, get) => {
     setPageTitle: (title) =>
       commit(
         mapActivePage((pg) => ({ ...pg, title })),
-        false,
+        { immediate: false },
       ),
     setFrame: (frame) => commit(mapActivePage((pg) => ({ ...pg, frame }))),
     toggleSparkle: () => commit(mapActivePage((pg) => ({ ...pg, sparkleOn: !pg.sparkleOn }))),
@@ -251,7 +283,7 @@ export const useNotebooks = create<NotebooksState>()((set, get) => {
     setNote: (note) =>
       commit(
         mapActivePage((pg) => ({ ...pg, note })),
-        false,
+        { immediate: false },
       ),
 
     resetPage: () =>
@@ -268,7 +300,7 @@ export const useNotebooks = create<NotebooksState>()((set, get) => {
           ...pg,
           steps: pg.steps.map((s) => (s.id === stepId ? { ...s, text } : s)),
         })),
-        false,
+        { immediate: false },
       ),
 
     toggleStep: (stepId) => {
@@ -313,7 +345,7 @@ export const useNotebooks = create<NotebooksState>()((set, get) => {
             s.id === stepId && s.type === "if" ? { ...s, labels: { ...s.labels, [key]: label } } : s,
           ),
         })),
-        false,
+        { immediate: false },
       ),
 
     addBranchStep: (stepId, key) =>
@@ -343,7 +375,7 @@ export const useNotebooks = create<NotebooksState>()((set, get) => {
             };
           }),
         })),
-        false,
+        { immediate: false },
       ),
 
     toggleBranchStep: (stepId, key, branchId) =>
@@ -404,7 +436,7 @@ export const useNotebooks = create<NotebooksState>()((set, get) => {
     setShapeText: (id, text) =>
       commit(
         mapActivePage((pg) => ({ ...pg, shapes: pg.shapes.map((s) => (s.id === id ? { ...s, text } : s)) })),
-        false,
+        { immediate: false },
       ),
 
     updateShape: (id, patch) =>

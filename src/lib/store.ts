@@ -5,11 +5,15 @@ import type { AppState } from "./types";
 /** Web版の localStorage/IndexedDB キー名をそのまま踏襲 */
 const STORAGE_KEY = "notebooks-v2";
 
-/** 保存済みの手帳データを読む。無ければ空。壊れていても落ちない。 */
+/**
+ * 保存済みの手帳データを読む。無ければ空。
+ * DBのオープン/読み取り失敗も、壊れたJSONも、すべて空stateにフォールバックして
+ * 起動時にクラッシュさせない（保存不可の警告は diagnoseStorage 側で出す）。
+ */
 export function loadState(): AppState {
-  const raw = kvGet(STORAGE_KEY);
-  if (!raw) return emptyState();
   try {
+    const raw = kvGet(STORAGE_KEY);
+    if (!raw) return emptyState();
     return normalizeState(JSON.parse(raw));
   } catch {
     return emptyState();
@@ -19,11 +23,6 @@ export function loadState(): AppState {
 /** state をまるごと保存（Web版 flushSave 相当） */
 export function saveState(state: AppState): void {
   kvSet(STORAGE_KEY, JSON.stringify(state));
-}
-
-/** バックアップ復元などで丸ごと差し替える */
-export function replaceState(state: AppState): void {
-  saveState(state);
 }
 
 export function emptyState(): AppState {

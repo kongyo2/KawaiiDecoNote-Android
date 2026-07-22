@@ -27,6 +27,7 @@ interface TransformableProps {
   rotatable?: boolean;
   handleTint?: string;
   boundsWidth?: number | undefined;
+  minY?: number;
   onSelect: () => void;
   onChange: (patch: TransformPatch) => void;
   onDelete?: () => void;
@@ -34,6 +35,8 @@ interface TransformableProps {
 }
 
 const HANDLE = 26;
+
+export const GRIP_RESERVE = 15;
 
 function tintWithAlpha(hex: string): string {
   const short = /^#([0-9a-fA-F])([0-9a-fA-F])([0-9a-fA-F])$/.exec(hex);
@@ -56,6 +59,7 @@ export function Transformable({
   rotatable = true,
   handleTint = colors.plum,
   boundsWidth,
+  minY = 0,
   onSelect,
   onChange,
   onDelete,
@@ -78,10 +82,10 @@ export function Transformable({
     const clampedW = boundsWidth !== undefined ? Math.max(minW, Math.min(w, boundsWidth)) : w;
     const maxX = boundsWidth !== undefined ? Math.max(0, boundsWidth - clampedW) : Number.POSITIVE_INFINITY;
     posX.value = Math.min(maxX, Math.max(0, x));
-    posY.value = Math.max(0, y);
+    posY.value = Math.max(minY, y);
     sw.value = clampedW;
     srot.value = rot;
-  }, [x, y, w, rot, boundsWidth, minW, posX, posY, sw, srot]);
+  }, [x, y, w, rot, boundsWidth, minW, minY, posX, posY, sw, srot]);
 
   const animStyle = useAnimatedStyle(() => ({
     transform: [{ translateX: posX.value }, { translateY: posY.value }, { rotate: `${srot.value}deg` }],
@@ -98,7 +102,7 @@ export function Transformable({
     .onUpdate((e) => {
       const maxX = boundsWidth !== undefined ? Math.max(0, boundsWidth - sw.value) : 1e6;
       posX.value = Math.min(maxX, Math.max(0, startX.value + e.translationX));
-      posY.value = Math.max(0, startY.value + e.translationY);
+      posY.value = Math.max(minY, startY.value + e.translationY);
     })
     .onEnd(() => {
       runOnJS(onChange)({ x: Math.round(posX.value), y: Math.round(posY.value) });

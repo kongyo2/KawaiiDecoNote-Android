@@ -1,4 +1,5 @@
 import { Pressable, StyleSheet, Text, View } from "react-native";
+import { GRIP_RESERVE } from "@/components/transform/Transformable";
 import { colors } from "@/lib/theme";
 import { useNotebooks } from "@/state/notebooks";
 import { useUi } from "@/state/ui";
@@ -17,7 +18,7 @@ function centerOf(shape: Shape, height: number, boundsWidth: number | undefined)
   const w = boundsWidth !== undefined ? Math.min(shape.w, boundsWidth) : shape.w;
   const maxX = boundsWidth !== undefined ? Math.max(0, boundsWidth - w) : Number.POSITIVE_INFINITY;
   const x = Math.min(maxX, Math.max(0, shape.x));
-  const y = Math.max(0, shape.y);
+  const y = Math.max(GRIP_RESERVE, shape.y);
   return { cx: x + w / 2, cy: y + (height || 44) / 2 };
 }
 

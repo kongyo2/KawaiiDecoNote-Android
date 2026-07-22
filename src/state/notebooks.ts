@@ -150,7 +150,7 @@ export const useNotebooks = create<NotebooksState>()((set, get) => {
     try {
       saveState(doc);
       dirty = false;
-      if (!get().storageOk) set({ storageOk: true, storageError: "" });
+      if (!loadCorrupt && !get().storageOk) set({ storageOk: true, storageError: "" });
       if (pendingUndoable && lastCommitted !== null && lastCommitted !== snapshot) {
         undoStack.push(lastCommitted);
         if (undoStack.length > MAX_UNDO) undoStack.shift();

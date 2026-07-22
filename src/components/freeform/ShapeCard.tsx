@@ -4,7 +4,7 @@ import { colors, fonts } from "@/lib/theme";
 import { useNotebooks } from "@/state/notebooks";
 import { SHAPE_MAX_WIDTH, SHAPE_MIN_WIDTH } from "@/lib/types";
 import type { Shape } from "@/lib/types";
-import { Transformable } from "@/components/transform/Transformable";
+import { GRIP_RESERVE, Transformable } from "@/components/transform/Transformable";
 import type { TransformPatch } from "@/components/transform/Transformable";
 
 const CHIC_HANDLE = "#555";
@@ -48,6 +48,7 @@ export function ShapeCard({
       showDragHandle={!connectMode}
       handleTint={CHIC_HANDLE}
       boundsWidth={boundsWidth}
+      minY={GRIP_RESERVE}
       onSelect={() => (connectMode ? onConnectTap(shape.id) : onSelect())}
       onChange={onChange}
       onDelete={() => deleteShape(shape.id)}

@@ -44,7 +44,7 @@ export default function NotebookEditor() {
   const resetPage = useNotebooks((s) => s.resetPage);
   const addSticker = useNotebooks((s) => s.addSticker);
   const addShape = useNotebooks((s) => s.addShape);
-  const addPhoto = useNotebooks((s) => s.addPhoto);
+  const addPhotoTo = useNotebooks((s) => s.addPhotoTo);
   const undo = useNotebooks((s) => s.undo);
   const importState = useNotebooks((s) => s.importState);
 
@@ -99,11 +99,15 @@ export default function NotebookEditor() {
     addShape(p.x, p.y);
   };
   const onAddPhoto = async () => {
+    // 貼り先(手帳/ページ)と座標は await の前に確定させる。
+    // 選択中にページを切り替えても、選んだときのページへ正しく貼るため。
+    const targetNotebook = notebook.id;
+    const targetPage = page.id;
+    const p = shapePos();
     try {
       const dataUrl = await pickPhotoAsDataUrl();
       if (!dataUrl) return;
-      const p = shapePos();
-      addPhoto(dataUrl, p.x, p.y);
+      addPhotoTo(targetNotebook, targetPage, dataUrl, p.x, p.y);
     } catch {
       showToast("⚠️ 写真の読み込みに失敗しました");
     }
@@ -114,10 +118,10 @@ export default function NotebookEditor() {
     if (willEnable) showToast("🔗 つなぎたいテキストを2つ順にタップしてね");
   };
   const onUndo = () => {
-    undo();
+    const ok = undo();
     // undoでカード等が消えたときに、選択やつなぎ線モードの参照が宙に浮かないよう解除
     useUi.getState().resetBoardUi();
-    showToast("↩️ ひとつ前に戻しました");
+    showToast(ok ? "↩️ ひとつ前に戻しました" : "⚠️ まだ保存中で戻せません…もう一度どうぞ");
   };
   const onScreenshot = async () => {
     select(null);

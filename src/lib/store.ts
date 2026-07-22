@@ -8,9 +8,14 @@ import type { AppState } from "./types";
  * CursorWindow「row too big」で読めなくなり得るため、行サイズ上限のないファイルにする。
  */
 const DOC_NAME = "notebooks-v2.json";
+const TMP_NAME = "notebooks-v2.tmp.json";
 
 function docFile(): File {
   return new File(Paths.document, DOC_NAME);
+}
+
+function tmpFile(): File {
+  return new File(Paths.document, TMP_NAME);
 }
 
 export function emptyState(): AppState {
@@ -32,9 +37,12 @@ export interface LoadResult {
 export function loadState(): LoadResult {
   let raw: string;
   try {
-    const f = docFile();
-    if (!f.exists) return { state: emptyState(), corrupt: false };
-    raw = f.textSync();
+    const dest = docFile();
+    const tmp = tmpFile();
+    // 本ファイルが無く一時ファイルだけある＝保存が move 直前で中断した場合の保険
+    const source = dest.exists ? dest : tmp.exists ? tmp : null;
+    if (!source) return { state: emptyState(), corrupt: false };
+    raw = source.textSync();
   } catch {
     return { state: emptyState(), corrupt: false };
   }
@@ -51,9 +59,19 @@ export function loadState(): LoadResult {
   }
 }
 
-/** state をまるごと保存（Web版 flushSave 相当） */
+/**
+ * state をまるごと保存（Web版 flushSave 相当）。
+ * まず一時ファイルへ全量書き、成功したものだけを本ファイルへ差し替える（原子的置換）。
+ * 書き込み途中で中断しても本ファイル（＝直前の正データ）は壊れない。
+ */
 export function saveState(state: AppState): void {
-  docFile().write(JSON.stringify(state));
+  const json = JSON.stringify(state);
+  const tmp = tmpFile();
+  if (tmp.exists) tmp.delete();
+  tmp.write(json);
+  const dest = docFile();
+  if (dest.exists) dest.delete();
+  tmp.move(dest);
 }
 
 /** 端末で自動保存が使えるか、書き込み→読み出しで確かめる（Web版 runStorageDiagnosis 相当） */

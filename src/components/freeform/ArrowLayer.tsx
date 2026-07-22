@@ -15,11 +15,14 @@ const ARROW_COLOR = "#888";
 
 // カードは Transformable 側で盤面内へクランプ描画される。矢印の端点も同じ式で
 // クランプして、復元/インポート座標がはみ出していても線が実際の描画位置を指すようにする。
+// 幅も Transformable と同様に盤面幅で抑える。カードが盤面より広いと描画幅が縮むため、
+// shape.w のままだと中心がズレて線がカードの外を指してしまう。
 function centerOf(shape: Shape, height: number, boundsWidth: number | undefined): { cx: number; cy: number } {
-  const maxX = boundsWidth !== undefined ? Math.max(0, boundsWidth - shape.w) : Number.POSITIVE_INFINITY;
+  const w = boundsWidth !== undefined ? Math.min(shape.w, boundsWidth) : shape.w;
+  const maxX = boundsWidth !== undefined ? Math.max(0, boundsWidth - w) : Number.POSITIVE_INFINITY;
   const x = Math.min(maxX, Math.max(0, shape.x));
   const y = Math.max(0, shape.y);
-  return { cx: x + shape.w / 2, cy: y + (height || 44) / 2 };
+  return { cx: x + w / 2, cy: y + (height || 44) / 2 };
 }
 
 function geometryFor(

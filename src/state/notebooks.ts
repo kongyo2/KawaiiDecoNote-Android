@@ -25,7 +25,8 @@ interface NotebooksState {
   initialize: () => void;
   recheckStorage: () => void;
   flushPending: () => void;
-  undo: () => void;
+  /** 直前の操作を1手戻す。保存に失敗していて戻せなかった場合は false */
+  undo: () => boolean;
   importState: (state: AppState) => void;
 
   /* 手帳（表紙） */
@@ -75,6 +76,8 @@ interface NotebooksState {
 
   /* 写真（notestyle） */
   addPhoto: (dataUrl: string, x: number, y: number) => void;
+  /** 選んだ時点のページに貼る（ピッカーの待ち時間中にページが変わっても取り違えない） */
+  addPhotoTo: (notebookId: string, pageId: string, dataUrl: string, x: number, y: number) => void;
   updatePhoto: (id: string, patch: { x?: number; y?: number; w?: number; rot?: number }) => void;
   deletePhoto: (id: string) => void;
 
@@ -90,6 +93,9 @@ interface NotebooksState {
 
 const MAX_UNDO = 15;
 
+const CORRUPT_MESSAGE =
+  "保存データが壊れていて読めませんでした。壊れたデータは退避しました。新しく編集して上書きする前に、必要なら「📂 読み込み」でバックアップから復元してください。";
+
 export const useNotebooks = create<NotebooksState>()((set, get) => {
   let saveTimer: ReturnType<typeof setTimeout> | null = null;
   let dirty = false;
@@ -99,6 +105,9 @@ export const useNotebooks = create<NotebooksState>()((set, get) => {
   let pendingUndoable = true;
   let lastCommitted: string | null = null;
   let undoStack: string[] = [];
+  // 保存データが壊れて読めなかった状態。storage自体の健全性チェック（recheck）では
+  // 消えないよう別に持つ。復元（importState）するまで警告を出し続ける。
+  let loadCorrupt = false;
   // 写真のbase64は巨大。undoスナップショットに丸ごと含めると数MB×最大15手でOOMになりうる。
   // そこで blob はここに id ごとに1本だけ退避し、undoスナップショットは dataUrl を空にして持つ。
   const photoBlobs = new Map<string, string>();
@@ -257,26 +266,38 @@ export const useNotebooks = create<NotebooksState>()((set, get) => {
       capturePhotoBlobs(doc);
       lastCommitted = snapshotFor(doc);
       undoStack = [];
+      loadCorrupt = corrupt;
       // 保存データが壊れていた場合は、上書き前に必ず気づけるよう警告を出す（生データは退避済み）
-      const ok = diag.ok && !corrupt;
-      const error = corrupt
-        ? "保存データが壊れていて読めませんでした。壊れたデータは退避しました。新しく編集して上書きする前に、必要なら「📂 読み込み」でバックアップから復元してください。"
-        : diag.error;
-      set({ ready: true, doc, storageOk: ok, storageError: error, canUndo: false });
+      set({
+        ready: true,
+        doc,
+        storageOk: diag.ok && !corrupt,
+        storageError: corrupt ? CORRUPT_MESSAGE : diag.error,
+        canUndo: false,
+      });
     },
 
     recheckStorage: () => {
       const diag = diagnoseStorage();
-      set({ storageOk: diag.ok, storageError: diag.error });
+      // storage が健全でも、壊れデータのロード警告は復元するまで消さない
+      set({
+        storageOk: diag.ok && !loadCorrupt,
+        storageError: loadCorrupt ? CORRUPT_MESSAGE : diag.error,
+      });
     },
 
     undo: () => {
       // 保留中のデバウンス編集があれば先に確定して undo チェックポイントにする。
       // これでタイプ直後（400ms以内）に↩️を押しても、まず直前の入力が1手戻る対象になり、
       // 古いスナップショットへ飛んで最新の入力が失われるのを防ぐ。
-      if (dirty) flushSave();
+      // 保留中のデバウンス編集を先に確定。ここで保存が失敗（dirtyのまま）なら、
+      // undoで未保存の入力を捨てないよう中断する。
+      if (dirty) {
+        flushSave();
+        if (dirty) return false;
+      }
       const prev = undoStack.pop();
-      if (prev === undefined) return;
+      if (prev === undefined) return false;
       // スナップショットは写真blobを持たないので、退避してあるblobで埋め戻す
       const restored = rehydratePhotos(JSON.parse(prev) as AppState);
       // どの手帳を開いているか（ルーター主導のナビゲーション）はundoで変えない
@@ -286,6 +307,7 @@ export const useNotebooks = create<NotebooksState>()((set, get) => {
       dirty = true;
       pendingUndoable = false;
       flushSave();
+      return true;
     },
 
     importState: (state) => {
@@ -293,6 +315,7 @@ export const useNotebooks = create<NotebooksState>()((set, get) => {
       capturePhotoBlobs(state);
       lastCommitted = snapshotFor(state);
       undoStack = [];
+      loadCorrupt = false; // 復元できたので壊れデータ警告は解除
       set({ doc: state, canUndo: false });
       dirty = true;
       pendingUndoable = false;
@@ -561,6 +584,25 @@ export const useNotebooks = create<NotebooksState>()((set, get) => {
           photos: [...pg.photos, { id: newId(), x, y, w: 140, rot: 0, dataUrl }],
         })),
       ),
+
+    addPhotoTo: (notebookId, pageId, dataUrl, x, y) => {
+      const doc = get().doc;
+      commit({
+        ...doc,
+        notebooks: doc.notebooks.map((nb) =>
+          nb.id !== notebookId
+            ? nb
+            : {
+                ...nb,
+                pages: nb.pages.map((pg) =>
+                  pg.id !== pageId
+                    ? pg
+                    : { ...pg, photos: [...pg.photos, { id: newId(), x, y, w: 140, rot: 0, dataUrl }] },
+                ),
+              },
+        ),
+      });
+    },
 
     updatePhoto: (id, patch) =>
       commit(mapActivePage((pg) => ({ ...pg, photos: pg.photos.map((p) => (p.id === id ? { ...p, ...patch } : p)) }))),

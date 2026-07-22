@@ -31,30 +31,26 @@ export type Step = NormalStep | IfStep;
 
 export type BranchKey = "yes" | "no";
 
-export interface Sticker {
+// ボード上に配置される装飾（ステッカー・テキスト・写真）に共通する配置情報。
+export interface Placement {
   id: string;
-  type: StickerType;
   x: number;
   y: number;
   rot: number;
+}
+
+export interface Sticker extends Placement {
+  type: StickerType;
   size: number;
 }
 
-export interface Shape {
-  id: string;
+export interface Shape extends Placement {
   text: string;
-  x: number;
-  y: number;
   w: number;
-  rot: number;
 }
 
-export interface Photo {
-  id: string;
-  x: number;
-  y: number;
+export interface Photo extends Placement {
   w: number;
-  rot: number;
   dataUrl: string;
 }
 

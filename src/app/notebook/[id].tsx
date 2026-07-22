@@ -12,11 +12,12 @@ import { StickerTray } from "@/components/board/StickerTray";
 import { FlowchartSection } from "@/components/flowchart/FlowchartSection";
 import { FreeformCanvas } from "@/components/freeform/FreeformCanvas";
 import { NotebookSection } from "@/components/notebook/NotebookSection";
-import { exportBackup, pickBackup } from "@/lib/backup";
+import { exportBackup } from "@/lib/backup";
 import { captureAndShare } from "@/lib/capture";
 import { pickPhotoAsDataUrl } from "@/lib/files";
 import { colors, fonts, TRAY_BASE_HEIGHT } from "@/lib/theme";
 import type { StickerType } from "@/lib/types";
+import { useImportBackup } from "@/state/backup";
 import { selectCurrentNotebook, selectCurrentPage, useNotebooks } from "@/state/notebooks";
 import { useUi } from "@/state/ui";
 
@@ -46,7 +47,6 @@ export default function NotebookEditor() {
   const addShape = useNotebooks((s) => s.addShape);
   const addPhotoTo = useNotebooks((s) => s.addPhotoTo);
   const undo = useNotebooks((s) => s.undo);
-  const importState = useNotebooks((s) => s.importState);
 
   const connectMode = useUi((s) => s.connectMode);
   const select = useUi((s) => s.select);
@@ -64,6 +64,8 @@ export default function NotebookEditor() {
   useEffect(() => {
     useUi.getState().resetBoardUi();
   }, [page?.id]);
+
+  const onImport = useImportBackup(() => router.replace("/"));
 
   const goBack = () => {
     if (router.canGoBack()) router.back();
@@ -135,30 +137,6 @@ export default function NotebookEditor() {
     } catch {
       showToast("書き出しに失敗しました…");
     }
-  };
-  const onImport = async () => {
-    const res = await pickBackup();
-    if (res.status === "canceled") return;
-    if (res.status === "invalid") {
-      showToast("⚠️ 読み込みに失敗しました…ファイルを確認してね");
-      return;
-    }
-    Alert.alert(
-      "バックアップを読み込む",
-      "現在のすべての手帳を、このバックアップの内容で上書きします。よろしいですか？",
-      [
-        { text: "やめる", style: "cancel" },
-        {
-          text: "上書き",
-          style: "destructive",
-          onPress: () => {
-            importState(res.state);
-            showToast("バックアップを読み込みました🌸");
-            router.replace("/");
-          },
-        },
-      ],
-    );
   };
   const onReset = () => {
     Alert.alert("ページを消去", "このページの中身を全部消します。よろしいですか？", [

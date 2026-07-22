@@ -5,12 +5,11 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { CoverGrid } from "@/components/cover/CoverGrid";
 import { CreatePanel } from "@/components/cover/CreatePanel";
 import { PromptModal } from "@/components/ui/PromptModal";
-import { pickBackup } from "@/lib/backup";
 import { notebookDisplayName } from "@/lib/model";
 import { colors, fonts } from "@/lib/theme";
 import type { NotebookType } from "@/lib/types";
+import { useImportBackup } from "@/state/backup";
 import { useNotebooks } from "@/state/notebooks";
-import { useUi } from "@/state/ui";
 
 export default function CoverScreen() {
   const router = useRouter();
@@ -22,8 +21,6 @@ export default function CoverScreen() {
   const deleteNotebook = useNotebooks((s) => s.deleteNotebook);
   const renameNotebook = useNotebooks((s) => s.renameNotebook);
   const recheckStorage = useNotebooks((s) => s.recheckStorage);
-  const importState = useNotebooks((s) => s.importState);
-  const showToast = useUi((s) => s.showToast);
 
   const [creating, setCreating] = useState(false);
   const [renameId, setRenameId] = useState<string | null>(null);
@@ -43,29 +40,7 @@ export default function CoverScreen() {
     ]);
   };
 
-  const onImport = async () => {
-    const res = await pickBackup();
-    if (res.status === "canceled") return;
-    if (res.status === "invalid") {
-      showToast("⚠️ 読み込みに失敗しました…ファイルを確認してね");
-      return;
-    }
-    Alert.alert(
-      "バックアップを読み込む",
-      "現在のすべての手帳を、このバックアップの内容で上書きします。よろしいですか？",
-      [
-        { text: "やめる", style: "cancel" },
-        {
-          text: "上書き",
-          style: "destructive",
-          onPress: () => {
-            importState(res.state);
-            showToast("バックアップを読み込みました🌸");
-          },
-        },
-      ],
-    );
-  };
+  const onImport = useImportBackup();
 
   const renameTarget = notebooks.find((n) => n.id === renameId);
 

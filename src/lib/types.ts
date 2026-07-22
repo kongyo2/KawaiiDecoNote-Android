@@ -143,3 +143,9 @@ export const PAPER_COLORS = [
   "#FFF6DE",
   "#E7F0FA",
 ] as const;
+
+/** シールの一辺(px)。transform操作(StickerItem)の下限/上限と、取り込み正規化の
+ *  クランプで共有し、両者の範囲がズレないようにする。 */
+export const STICKER_MIN_SIZE = 20;
+export const STICKER_MAX_SIZE = 160;
+export const STICKER_DEFAULT_SIZE = 44;

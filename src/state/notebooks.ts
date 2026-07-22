@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import { diagnoseStorage, emptyState, loadState, saveState } from "@/lib/store";
 import { newBranchStep, newId, newIfStep, newNotebook, newPage, newStep } from "@/lib/model";
+import { STICKER_DEFAULT_SIZE } from "@/lib/types";
 import type {
   AppState,
   Frame,
@@ -536,7 +537,10 @@ export const useNotebooks = create<NotebooksState>()((set, get) => {
       commit(
         mapActivePage((pg) => ({
           ...pg,
-          stickers: [...pg.stickers, { id: newId(), type, x, y, rot: Math.round(Math.random() * 30 - 15), size: 44 }],
+          stickers: [
+            ...pg.stickers,
+            { id: newId(), type, x, y, rot: Math.round(Math.random() * 30 - 15), size: STICKER_DEFAULT_SIZE },
+          ],
         })),
       ),
 

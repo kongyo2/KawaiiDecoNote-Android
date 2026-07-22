@@ -16,7 +16,7 @@ import type {
   Sticker,
   StickerType,
 } from "./types";
-import { FRAMES, RULE_STYLES, STICKER_TYPES } from "./types";
+import { FRAMES, RULE_STYLES, STICKER_DEFAULT_SIZE, STICKER_MAX_SIZE, STICKER_MIN_SIZE, STICKER_TYPES } from "./types";
 
 /* ---------------- ID採番（Web版 newId 相当） ---------------- */
 
@@ -110,6 +110,9 @@ function str(v: unknown, fallback = ""): string {
 function num(v: unknown, fallback = 0): number {
   return typeof v === "number" && Number.isFinite(v) ? v : fallback;
 }
+function clampNum(v: unknown, fallback: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, num(v, fallback)));
+}
 function bool(v: unknown, fallback = false): boolean {
   return typeof v === "boolean" ? v : fallback;
 }
@@ -163,7 +166,9 @@ function normalizeSticker(raw: unknown): Sticker {
     x: num(r.x),
     y: num(r.y),
     rot: num(r.rot),
-    size: num(r.size, 44),
+    // 0/負値/極端に大きいサイズは、StickerShape の SVG 幅高へそのまま渡ると不正な
+    // ネイティブ寸法や巨大描画になる。transform操作と同じ範囲へ丸める。
+    size: clampNum(r.size, STICKER_DEFAULT_SIZE, STICKER_MIN_SIZE, STICKER_MAX_SIZE),
   };
 }
 
@@ -272,18 +277,39 @@ export function normalizeNotebook(raw: unknown): Notebook | null {
   };
 }
 
+/**
+ * 手帳ID(全体で一意)とページID(手帳内で一意)の重複を振り直す。先に出た方を優先し、
+ * 後続の重複へ新IDを与える。壊れ/細工バックアップが同一IDを含むと、React のキーが衝突し、
+ * さらに ID一致で動く操作が同IDの要素すべてに及ぶ（例: deletePage は同IDのページを全消し、
+ * renameNotebook は同IDの手帳を全改名）。先勝ちなので activeNotebookId / activePageId が
+ * 指す先（＝最初の出現）は保たれる。
+ */
+function dedupeIds(notebooks: Notebook[]): void {
+  const seenNb = new Set<string>();
+  for (const nb of notebooks) {
+    if (seenNb.has(nb.id)) nb.id = newId();
+    seenNb.add(nb.id);
+    const seenPg = new Set<string>();
+    for (const pg of nb.pages) {
+      if (seenPg.has(pg.id)) pg.id = newId();
+      seenPg.add(pg.id);
+    }
+  }
+}
+
 export function normalizeState(raw: unknown): AppState {
   const r = rec(raw);
   const notebooks = list(r.notebooks)
     .map(normalizeNotebook)
     .filter((n): n is Notebook => n !== null);
+  // 採番カウンタを既存IDの先へ進めてから重複IDを振り直す（新IDが既存と衝突しないように）
+  seedUid({ activeNotebookId: null, notebooks });
+  dedupeIds(notebooks);
   let activeNotebookId: string | null = typeof r.activeNotebookId === "string" ? r.activeNotebookId : null;
   if (activeNotebookId && !notebooks.some((n) => n.id === activeNotebookId)) {
     activeNotebookId = null;
   }
-  const state: AppState = { activeNotebookId, notebooks };
-  seedUid(state);
-  return state;
+  return { activeNotebookId, notebooks };
 }
 
 /** 手帳の表示名（未設定時はタイプ別のプレースホルダ） */

@@ -1,5 +1,6 @@
 import { colors } from "@/lib/theme";
 import { useNotebooks } from "@/state/notebooks";
+import { STICKER_MAX_SIZE, STICKER_MIN_SIZE } from "@/lib/types";
 import type { Sticker } from "@/lib/types";
 import { StickerShape } from "@/components/ui/StickerShape";
 import { Transformable } from "@/components/transform/Transformable";
@@ -37,8 +38,8 @@ export function StickerItem({
       y={sticker.y}
       w={sticker.size}
       rot={sticker.rot}
-      minW={20}
-      maxW={160}
+      minW={STICKER_MIN_SIZE}
+      maxW={STICKER_MAX_SIZE}
       square
       selected={selected}
       bodyDraggable

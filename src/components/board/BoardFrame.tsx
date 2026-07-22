@@ -46,6 +46,10 @@ export function BoardFrame({ page, children }: { page: Page; children: ReactNode
   const selectedId = useUi((s) => s.selectedId);
   const select = useUi((s) => s.select);
 
+  // シールを盤面の下方向にドラッグしても切れないよう、シールの下端まで盤面を伸ばす。
+  // （シールは content と同じ原点に絶対配置されるので content の minHeight で伸ばせる）
+  const stickerExtent = page.stickers.reduce((m, s) => Math.max(m, s.y + s.size + 20), 0);
+
   return (
     <View style={styles.wrap}>
       <View style={[styles.board, FRAME_STYLE[page.frame]]}>
@@ -57,7 +61,7 @@ export function BoardFrame({ page, children }: { page: Page; children: ReactNode
         <Corner frame={page.frame} style={styles.bl} />
         <Corner frame={page.frame} style={styles.br} />
 
-        <View style={styles.content}>{children}</View>
+        <View style={[styles.content, stickerExtent > 0 ? { minHeight: stickerExtent } : null]}>{children}</View>
 
         {page.stickers.map((sticker) => (
           <StickerItem

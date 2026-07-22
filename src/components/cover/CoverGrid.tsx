@@ -19,9 +19,12 @@ export function CoverGrid({
   return (
     <View style={styles.grid}>
       {notebooks.map((nb) => (
-        <Pressable key={nb.id} style={styles.cell} onPress={() => onOpen(nb.id)}>
+        <View key={nb.id} style={styles.cell}>
           <View style={[styles.card, { backgroundColor: nb.color }]}>
-            <View style={styles.badge}>
+            {/* 「開く」は背面の絶対配置Pressableに。✏️/✕ は前面の別Pressableなので、
+                角ボタンのタップが手帳を開いてしまう（削除後に消えた手帳の画面に残る）事故を防ぐ */}
+            <Pressable style={StyleSheet.absoluteFill} onPress={() => onOpen(nb.id)} />
+            <View style={styles.badge} pointerEvents="none">
               <Text style={styles.badgeText}>{nb.type === "notestyle" ? "📓" : "📔"}</Text>
             </View>
             <Pressable style={[styles.corner, styles.edit]} onPress={() => onRename(nb.id)} hitSlop={6}>
@@ -30,11 +33,11 @@ export function CoverGrid({
             <Pressable style={[styles.corner, styles.del]} onPress={() => onDelete(nb.id)} hitSlop={6}>
               <Text style={styles.cornerText}>✕</Text>
             </Pressable>
-            <Text style={styles.name} numberOfLines={3}>
+            <Text style={styles.name} numberOfLines={3} pointerEvents="none">
               {notebookDisplayName(nb)}
             </Text>
           </View>
-        </Pressable>
+        </View>
       ))}
 
       <Pressable style={styles.cell} onPress={onAdd}>

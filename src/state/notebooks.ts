@@ -138,12 +138,18 @@ export const useNotebooks = create<NotebooksState>()((set, get) => {
   const commit = (doc: AppState, opts?: CommitOpts): void => {
     const immediate = opts?.immediate ?? true;
     const undoable = opts?.undoable ?? true;
-    // undo対象外の変更の前に、保留中のテキスト編集を先にundo可能として確定しておく
-    if (!undoable && dirty) flushSave(true);
     set({ doc });
     dirty = true;
     if (immediate) flushSave(undoable);
     else scheduleSave();
+    if (!undoable) {
+      // ナビゲーション/構造変更（手帳の開閉・作成・削除、ページ切替）をまたぐと、
+      // 以前のundoスナップショットは今の手帳/ページを含まず、復元するとルートと
+      // stateがずれて「見つかりません」に落ちる。undoは「今の文脈で直前にした編集」
+      // だけを対象にしたいので、ここで履歴を破棄する（新しいdocは上で保存済み）。
+      undoStack = [];
+      if (get().canUndo) set({ canUndo: false });
+    }
   };
 
   /** 保留中の未保存編集を強制的に書き出す（アプリのバックグラウンド化・定期リトライ用） */

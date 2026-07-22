@@ -172,7 +172,10 @@ function normalizeShape(raw: unknown): Shape {
 function normalizePhoto(raw: unknown): Photo | null {
   const r = rec(raw);
   const dataUrl = str(r.dataUrl) || str(r.image);
-  if (!dataUrl) return null;
+  // 埋め込み画像(data:image/...)だけ受け付ける。オフライン専用アプリなので、細工した
+  // バックアップに http(s)/file/content 等の外部URLが混ざっていても、読み込んだ Image が
+  // 外部ホストへ取りに行って「ファイルを開いた」ことやIPが漏れるのを防ぐ。
+  if (!/^data:image\//i.test(dataUrl)) return null;
   return {
     id: str(r.id) || newId(),
     x: num(r.x),

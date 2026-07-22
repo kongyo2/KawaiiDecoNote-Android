@@ -75,9 +75,7 @@ interface NotebooksState {
   updateShape: (id: string, patch: { x?: number; y?: number; w?: number; rot?: number }) => void;
   deleteShape: (id: string) => void;
 
-  /* 写真（notestyle） */
-  addPhoto: (dataUrl: string, x: number, y: number) => void;
-  /** 選んだ時点のページに貼る（ピッカーの待ち時間中にページが変わっても取り違えない） */
+  /* 写真（notestyle）。選んだ時点のページに貼る（ピッカーの待ち時間中にページが変わっても取り違えない） */
   addPhotoTo: (notebookId: string, pageId: string, dataUrl: string, x: number, y: number) => void;
   updatePhoto: (id: string, patch: { x?: number; y?: number; w?: number; rot?: number }) => void;
   deletePhoto: (id: string) => void;
@@ -590,14 +588,6 @@ export const useNotebooks = create<NotebooksState>()((set, get) => {
       ),
 
     /* ---------------- 写真 ---------------- */
-
-    addPhoto: (dataUrl, x, y) =>
-      commit(
-        mapActivePage((pg) => ({
-          ...pg,
-          photos: [...pg.photos, { id: newId(), x, y, w: PHOTO_DEFAULT_WIDTH, rot: 0, dataUrl }],
-        })),
-      ),
 
     addPhotoTo: (notebookId, pageId, dataUrl, x, y) => {
       const doc = get().doc;

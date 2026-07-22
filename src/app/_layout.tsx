@@ -55,10 +55,14 @@ export default function RootLayout() {
   // 開いている手帳のページに貼る（貼り先が無ければ捨てる）
   useEffect(() => {
     const recover = async () => {
+      // 取り込み(リサイズ/エンコード)は時間がかかる。その前に貼り先の手帳/ページを確定し、
+      // 処理中にページや手帳を切り替えても、ピッカーを開いたときのページへ貼る（無ければ捨てる）。
+      const before = useNotebooks.getState();
+      const targetNotebook = selectCurrentNotebook(before)?.id;
+      const targetPage = selectCurrentPage(before)?.id;
       const dataUrl = await recoverPendingPhotoAsDataUrl();
-      if (!dataUrl) return;
-      const st = useNotebooks.getState();
-      if (st.doc.activeNotebookId) st.addPhoto(dataUrl, 16, 16);
+      if (!dataUrl || !targetNotebook || !targetPage) return;
+      useNotebooks.getState().addPhotoTo(targetNotebook, targetPage, dataUrl, 16, 16);
     };
     void recover();
     const sub = AppState.addEventListener("change", (state) => {

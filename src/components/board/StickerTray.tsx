@@ -50,7 +50,12 @@ export function StickerTray(props: TrayProps) {
 
   return (
     <View style={[styles.tray, { paddingBottom: insets.bottom + 8 }, props.chic && styles.trayChic]}>
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.row}>
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.row}
+        keyboardShouldPersistTaps="handled"
+      >
         <Text style={styles.label}>シール</Text>
         {STICKER_TYPES.map((type) => (
           <Pressable key={type} onPress={() => props.onAddSticker(type)} style={styles.sticker} hitSlop={4}>

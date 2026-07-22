@@ -75,7 +75,10 @@ export default function CoverScreen() {
 
   return (
     <>
-      <ScrollView contentContainerStyle={[styles.content, { paddingTop: insets.top + 22 }]}>
+      <ScrollView
+        contentContainerStyle={[styles.content, { paddingTop: insets.top + 22 }]}
+        keyboardShouldPersistTaps="handled"
+      >
         <View style={styles.header}>
           <Text style={styles.title}>かわいくデコれる手帳 🌸✨</Text>
           <Text style={styles.subtitle}>お気に入りの手帳を選んでね</Text>

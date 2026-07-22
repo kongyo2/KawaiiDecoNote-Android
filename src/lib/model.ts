@@ -119,6 +119,8 @@ function num(v: unknown, fallback = 0): number {
 function clampNum(v: unknown, fallback: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, num(v, fallback)));
 }
+
+const MAX_POSITION = 20000;
 function bool(v: unknown, fallback = false): boolean {
   return typeof v === "boolean" ? v : fallback;
 }
@@ -166,8 +168,8 @@ function normalizeSticker(raw: unknown): Sticker {
   return {
     id: str(r.id) || newId(),
     type: oneOf<StickerType>(r.type, STICKER_TYPES, "star"),
-    x: num(r.x),
-    y: num(r.y),
+    x: clampNum(r.x, 0, 0, MAX_POSITION),
+    y: clampNum(r.y, 0, 0, MAX_POSITION),
     rot: num(r.rot),
     size: clampNum(r.size, STICKER_DEFAULT_SIZE, STICKER_MIN_SIZE, STICKER_MAX_SIZE),
   };
@@ -178,8 +180,8 @@ function normalizeShape(raw: unknown): Shape {
   return {
     id: str(r.id) || newId(),
     text: str(r.text),
-    x: num(r.x),
-    y: num(r.y),
+    x: clampNum(r.x, 0, 0, MAX_POSITION),
+    y: clampNum(r.y, 0, 0, MAX_POSITION),
     w: clampNum(r.w, SHAPE_DEFAULT_WIDTH, SHAPE_MIN_WIDTH, SHAPE_MAX_WIDTH),
     rot: num(r.rot),
   };
@@ -191,8 +193,8 @@ function normalizePhoto(raw: unknown): Photo | null {
   if (!/^data:image\//i.test(dataUrl)) return null;
   return {
     id: str(r.id) || newId(),
-    x: num(r.x),
-    y: num(r.y),
+    x: clampNum(r.x, 0, 0, MAX_POSITION),
+    y: clampNum(r.y, 0, 0, MAX_POSITION),
     w: clampNum(r.w, PHOTO_DEFAULT_WIDTH, PHOTO_MIN_WIDTH, PHOTO_MAX_WIDTH),
     rot: num(r.rot),
     dataUrl,

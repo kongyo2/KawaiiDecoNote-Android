@@ -1,6 +1,6 @@
 {
   "name": "kawaii-deconote",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "main": "expo-router/entry",
   "scripts": {
     "start": "expo start",
@@ -8,6 +8,9 @@
     "ios": "expo run:ios",
     "typecheck": "tsc --noEmit",
     "typecheck:watch": "tsc --noEmit --watch",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
     "lint": "oxlint --format agent",
     "lint:fix": "oxlint --fix",
     "lint:strict": "oxlint --deny-warnings",
@@ -47,10 +50,12 @@
   },
   "devDependencies": {
     "@types/react": "~19.1.0",
+    "@vitest/coverage-v8": "^4.1.10",
     "oxlint": "^1.73.0",
     "prettier": "^3.9.5",
     "sharp": "^0.35.3",
-    "typescript": "~5.9.2"
+    "typescript": "~5.9.2",
+    "vitest": "^4.1.10"
   },
   "private": true
 }

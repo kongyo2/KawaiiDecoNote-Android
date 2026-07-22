@@ -2,7 +2,7 @@
   "expo": {
     "name": "かわいくデコれる手帳",
     "slug": "kawaii-deconote",
-    "version": "0.2.0",
+    "version": "0.2.1",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "scheme": "kawaiideconote",
@@ -15,7 +15,7 @@
     },
     "android": {
       "package": "io.github.pppzet.kawaiideconote",
-      "versionCode": 2,
+      "versionCode": 3,
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#F3E9F7"

@@ -119,6 +119,16 @@ function list(v: unknown): unknown[] {
 function oneOf<T extends string>(v: unknown, allowed: readonly T[], fallback: T): T {
   return typeof v === "string" && (allowed as readonly string[]).includes(v) ? (v as T) : fallback;
 }
+function isPlainObject(v: unknown): v is Record<string, unknown> {
+  return typeof v === "object" && v !== null && !Array.isArray(v);
+}
+// RN が受け付ける16進色(#rgb/#rgba/#rrggbb/#rrggbbaa)だけ通す。手帳色・用紙色は生成側が
+// 常に16進パレットなので、壊れ/手編集バックアップの "ffffff" や "not-a-color" をそのまま
+// backgroundColor に渡して不正 ColorValue になるのを防ぎ、既定色へ落とす。
+const HEX_COLOR = /^#(?:[0-9a-fA-F]{3,4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/;
+function hexColor(v: unknown, fallback: string): string {
+  return typeof v === "string" && HEX_COLOR.test(v) ? v : fallback;
+}
 
 function normalizeBranchStep(raw: unknown): BranchStep {
   const r = rec(raw);
@@ -222,15 +232,18 @@ export function normalizePage(raw: unknown): Page {
       .map(normalizeArrow)
       .filter((a): a is Arrow => a !== null),
     ruleStyle: oneOf<RuleStyle>(r.ruleStyle, RULE_STYLES, "lines"),
-    paperColor: str(r.paperColor, "#FBF7F2"),
+    paperColor: hexColor(r.paperColor, "#FBF7F2"),
   };
 }
 
 export function normalizeNotebook(raw: unknown): Notebook | null {
-  const r = rec(raw);
-  const pagesRaw = list(r.pages);
-  const pages = pagesRaw.map(normalizePage);
-  if (pages.length === 0) pages.push(newPage("flowchart", ""));
+  if (!isPlainObject(raw)) return null;
+  const r = raw;
+  // 本物の手帳は必ずページ(オブジェクト)を1つ以上持つ。ページが無い/中身がプリミティブなら、
+  // 空白手帳をでっち上げず null で弾く。壊れ/細工バックアップの {} や 1 を「有効な手帳」に
+  // 化けさせ、pickBackup の非空チェックをすり抜けて実データを空手帳で上書きするのを防ぐ。
+  const pages = list(r.pages).filter(isPlainObject).map(normalizePage);
+  if (pages.length === 0) return null;
   // 旧名 rollbahn → notestyle（Web版の互換処理）
   const rawType = r.type === "rollbahn" ? "notestyle" : r.type;
   const type = oneOf<NotebookType>(rawType, ["profile", "notestyle"], "profile");
@@ -253,7 +266,7 @@ export function normalizeNotebook(raw: unknown): Notebook | null {
     id: str(r.id) || newId(),
     name: str(r.name),
     type,
-    color: str(r.color, "#C9B6E4"),
+    color: hexColor(r.color, "#C9B6E4"),
     activePageId,
     pages,
   };

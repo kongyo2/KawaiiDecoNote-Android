@@ -23,7 +23,6 @@ export function StickerItem({
   const deleteSticker = useNotebooks((s) => s.deleteSticker);
 
   const onChange = (patch: TransformPatch) => {
-    // シールは正方形。リサイズ幅は size として保存する。
     const next: { x?: number; y?: number; rot?: number; size?: number } = {};
     if (patch.x !== undefined) next.x = patch.x;
     if (patch.y !== undefined) next.y = patch.y;

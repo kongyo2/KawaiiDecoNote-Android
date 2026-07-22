@@ -3,10 +3,6 @@ import { Modal, Pressable, StyleSheet, Text, View } from "react-native";
 import { colors, fonts, radii } from "@/lib/theme";
 import { AppButton, AppTextInput } from "./kit";
 
-/**
- * 名前入力用のモーダル。Web版の prompt() 相当。
- * （React Native の Alert.prompt は iOS 専用のため自前で用意）
- */
 export function PromptModal({
   visible,
   title,
@@ -35,9 +31,7 @@ export function PromptModal({
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onCancel}>
       <View style={styles.backdrop}>
-        {/* 閉じる用の背景タップは、カードの「背面」に別Pressableとして置く。
-            カード内（入力欄・ボタン）のタップが背景のonCancelへ伝わって、
-            入力やフォーカスのつもりが閉じてしまう事故を防ぐ。 */}
+        {}
         <Pressable style={StyleSheet.absoluteFill} onPress={onCancel} />
         <View style={styles.card}>
           <Text style={styles.title}>{title}</Text>

@@ -2,10 +2,6 @@ import { StyleSheet, View, useWindowDimensions } from "react-native";
 import Svg, { Defs, LinearGradient, RadialGradient, Rect, Stop } from "react-native-svg";
 import { colors } from "@/lib/theme";
 
-/**
- * Web版 body の背景（3つの radial-gradient + 斜めの linear-gradient）を
- * react-native-svg のグラデーションで再現。notestyle は無地のシック色。
- */
 export function Background({ chic }: { chic: boolean }) {
   const { width, height } = useWindowDimensions();
 

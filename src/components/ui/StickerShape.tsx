@@ -16,7 +16,6 @@ const DEFAULTS: Record<StickerType, { c1: string; c2: string }> = {
   sparkle: { c1: "#F4D58D", c2: "#F4D58D" },
 };
 
-/** Web版の SVG.* ジェネレータを react-native-svg に移植したシール描画 */
 export function StickerShape({ type, size, c1, c2 }: StickerShapeProps) {
   const d = DEFAULTS[type];
   const fill = c1 ?? d.c1;

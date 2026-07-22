@@ -6,7 +6,6 @@ import type { Page } from "@/lib/types";
 
 const LINE_HEIGHT = 32;
 
-/** profile手帳の「自由帳」ページ。罫線つきのメモ（Web版 .note-text） */
 export function NotebookSection({ page }: { page: Page }) {
   const setNote = useNotebooks((s) => s.setNote);
 

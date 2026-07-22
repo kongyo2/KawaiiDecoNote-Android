@@ -53,7 +53,6 @@ export default function NotebookEditor() {
   const toggleConnectMode = useUi((s) => s.toggleConnectMode);
   const showToast = useUi((s) => s.showToast);
 
-  // ルートに来たら対象の手帳をアクティブにし、離れたら閉じる
   useEffect(() => {
     if (id) useNotebooks.getState().openNotebook(id);
     return () => {
@@ -62,7 +61,6 @@ export default function NotebookEditor() {
     };
   }, [id]);
 
-  // ページを切り替えたら選択やつなぎ線モードを解除
   useEffect(() => {
     useUi.getState().resetBoardUi();
   }, [page?.id]);
@@ -99,8 +97,6 @@ export default function NotebookEditor() {
     addShape(p.x, p.y);
   };
   const onAddPhoto = async () => {
-    // 貼り先(手帳/ページ)と座標は await の前に確定させる。
-    // 選択中にページを切り替えても、選んだときのページへ正しく貼るため。
     const targetNotebook = notebook.id;
     const targetPage = page.id;
     const p = shapePos();
@@ -119,7 +115,6 @@ export default function NotebookEditor() {
   };
   const onUndo = () => {
     const ok = undo();
-    // undoでカード等が消えたときに、選択やつなぎ線モードの参照が宙に浮かないよう解除
     useUi.getState().resetBoardUi();
     showToast(ok ? "↩️ ひとつ前に戻しました" : "⚠️ まだ保存中で戻せません…もう一度どうぞ");
   };
@@ -179,12 +174,10 @@ export default function NotebookEditor() {
     ]);
   };
   const onDeletePage = (pageId: string) => {
-    // 最後の1枚は消せない（確認ダイアログを出す前に弾く）
     if (notebook.pages.length <= 1) {
       showToast("最後のページは消せません🌸");
       return;
     }
-    // ページ削除は構造変更で undo 対象外（元に戻せない）。中身ごと消えるので確認する。
     Alert.alert("ページを削除", "このページを削除します。中身も全部消えます。よろしいですか？", [
       { text: "やめる", style: "cancel" },
       { text: "削除", style: "destructive", onPress: () => deletePage(pageId) },
@@ -244,8 +237,7 @@ export default function NotebookEditor() {
         </View>
       </ScrollView>
 
-      {/* 保存に失敗しているときは編集画面でも警告（Web版は cover だけだった）。
-          タップでそのままバックアップ書き出しへ誘導する。 */}
+      {}
       {!storageOk ? (
         <Pressable style={[styles.saveWarn, { top: insets.top + 6 }]} onPress={onExport}>
           <Text style={styles.saveWarnText}>⚠️ 保存できていません。タップして「💾書き出し」でバックアップを</Text>

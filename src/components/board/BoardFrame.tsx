@@ -41,14 +41,11 @@ const FRAME_STYLE: Record<Page["frame"], object> = {
   ribbon: { borderWidth: 2, borderColor: "rgba(232,180,188,0.55)" },
 };
 
-/** profile手帳の飾り枠つき盤面（Web版 .board の frame-* + corner + ribbon-tag） */
 export function BoardFrame({ page, children }: { page: Page; children: ReactNode }) {
   const selectedId = useUi((s) => s.selectedId);
   const select = useUi((s) => s.select);
   const [contentW, setContentW] = useState<number | undefined>(undefined);
 
-  // シールを盤面の下方向にドラッグしても切れないよう、シールの下端まで盤面を伸ばす。
-  // （シールは content と同じ原点に絶対配置されるので content の minHeight で伸ばせる）
   const stickerExtent = page.stickers.reduce((m, s) => Math.max(m, s.y + s.size + 20), 0);
 
   return (

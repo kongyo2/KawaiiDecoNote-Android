@@ -13,10 +13,6 @@ interface Geo {
 
 const ARROW_COLOR = "#888";
 
-// カードは Transformable 側で盤面内へクランプ描画される。矢印の端点も同じ式で
-// クランプして、復元/インポート座標がはみ出していても線が実際の描画位置を指すようにする。
-// 幅も Transformable と同様に盤面幅で抑える。カードが盤面より広いと描画幅が縮むため、
-// shape.w のままだと中心がズレて線がカードの外を指してしまう。
 function centerOf(shape: Shape, height: number, boundsWidth: number | undefined): { cx: number; cy: number } {
   const w = boundsWidth !== undefined ? Math.min(shape.w, boundsWidth) : shape.w;
   const maxX = boundsWidth !== undefined ? Math.max(0, boundsWidth - w) : Number.POSITIVE_INFINITY;
@@ -60,8 +56,6 @@ function ArrowItem({ arrow, geo, selected }: { arrow: Arrow; geo: Geo; selected:
       onPress={() => select(arrow.id)}
       style={[
         styles.wrap,
-        // 未選択の線はカードより下（描画順で背面）に置き、カードのタップを奪わない。
-        // 選択中だけ前面に出して、端の削除/戻すボタンを押せるようにする。
         selected ? styles.wrapSelected : null,
         { left: geo.mx - len / 2, top: geo.my - 11, width: len, transform: [{ rotate: `${geo.angle}deg` }] },
       ]}

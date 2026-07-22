@@ -1,4 +1,3 @@
-// 使う3ウェイトだけをサブパスから読み込み、他ウェイトはバンドルしない
 import { MPLUSRounded1c_400Regular } from "@expo-google-fonts/m-plus-rounded-1c/400Regular";
 import { MPLUSRounded1c_700Bold } from "@expo-google-fonts/m-plus-rounded-1c/700Bold";
 import { Yomogi_400Regular } from "@expo-google-fonts/yomogi/400Regular";
@@ -36,8 +35,6 @@ export default function RootLayout() {
     setInitialized(true);
   }, []);
 
-  // アプリがバックグラウンドへ回るとき、デバウンス中の未保存編集を確定させる
-  // （Web版の visibilitychange / pagehide 相当。強制終了前の入力ロストを防ぐ）
   useEffect(() => {
     const sub = AppState.addEventListener("change", (state) => {
       if (state !== "active") useNotebooks.getState().flushPending();
@@ -45,18 +42,13 @@ export default function RootLayout() {
     return () => sub.remove();
   }, []);
 
-  // 保存が一時的に失敗しても、定期的に再保存を試みる（Web版の8秒ごとフラッシュ相当）
   useEffect(() => {
     const id = setInterval(() => useNotebooks.getState().flushPending(), 8000);
     return () => clearInterval(id);
   }, []);
 
-  // Android: 写真ピッカー中にアクティビティが破棄されても、復帰時に選択結果を拾って
-  // 開いている手帳のページに貼る（貼り先が無ければ捨てる）
   useEffect(() => {
     const recover = async () => {
-      // 取り込み(リサイズ/エンコード)は時間がかかる。その前に貼り先の手帳/ページを確定し、
-      // 処理中にページや手帳を切り替えても、ピッカーを開いたときのページへ貼る（無ければ捨てる）。
       const before = useNotebooks.getState();
       const targetNotebook = selectCurrentNotebook(before)?.id;
       const targetPage = selectCurrentPage(before)?.id;

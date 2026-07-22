@@ -38,8 +38,6 @@ export function FreeformCanvas({ page }: { page: Page }) {
 
   const isEmpty = page.shapes.length === 0 && page.photos.length === 0 && page.stickers.length === 0;
 
-  // 実測した高さ（テキストは複数行、写真は縦横比で伸びる）で下端を求め、
-  // 盤面が中身を切り落とさない（overflow:hidden で見えなくなる/撮影から漏れる）ようにする
   const minHeight = useMemo(() => {
     let maxY = 0;
     for (const s of page.shapes) maxY = Math.max(maxY, s.y + (heights[s.id] ?? 120));

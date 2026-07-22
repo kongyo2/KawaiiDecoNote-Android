@@ -4,7 +4,6 @@ import type { RuleStyle } from "@/lib/types";
 
 const STROKE = "rgba(155,130,180,0.35)";
 
-/** notestyle盤面の用紙パターン（Web版 paperPatternDataUri を移植：横罫/方眼/ドット/無地） */
 export function PaperBackground({ ruleStyle, color }: { ruleStyle: RuleStyle; color: string }) {
   return (
     <Svg style={StyleSheet.absoluteFill} width="100%" height="100%">

@@ -21,8 +21,7 @@ export function CoverGrid({
       {notebooks.map((nb) => (
         <View key={nb.id} style={styles.cell}>
           <View style={[styles.card, { backgroundColor: nb.color }]}>
-            {/* 「開く」は背面の絶対配置Pressableに。✏️/✕ は前面の別Pressableなので、
-                角ボタンのタップが手帳を開いてしまう（削除後に消えた手帳の画面に残る）事故を防ぐ */}
+            {}
             <Pressable style={StyleSheet.absoluteFill} onPress={() => onOpen(nb.id)} />
             <View style={styles.badge} pointerEvents="none">
               <Text style={styles.badgeText}>{nb.type === "notestyle" ? "📓" : "📔"}</Text>

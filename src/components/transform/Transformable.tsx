@@ -15,23 +15,17 @@ export interface TransformPatch {
 interface TransformableProps {
   x: number;
   y: number;
-  /** 幅（シールは正方形なので高さも兼ねる） */
   w: number;
   rot: number;
   minW: number;
   maxW: number;
-  /** シールのように高さ＝幅で正方形にするか */
   square?: boolean;
   selected: boolean;
-  /** 本体全体をドラッグ対象にするか（シール・写真=true、テキストは専用グリップ=false） */
   bodyDraggable?: boolean;
-  /** テキストカード用の上部ドラッググリップを出すか */
   showDragHandle?: boolean;
   resizable?: boolean;
   rotatable?: boolean;
-  /** ハンドルの色（notestyleのシックモードは黒系） */
   handleTint?: string;
-  /** 置ける領域の幅。ドラッグ位置を [0, boundsWidth - 幅] に収める（未指定なら x,y>=0 のみ） */
   boundsWidth?: number | undefined;
   onSelect: () => void;
   onChange: (patch: TransformPatch) => void;
@@ -41,7 +35,6 @@ interface TransformableProps {
 
 const HANDLE = 26;
 
-/** hex色に約33%の透明度を足す。3桁hex(#rgb)は6桁に伸ばしてから付ける（#555+55=#55555 の不正色を防ぐ） */
 function tintWithAlpha(hex: string): string {
   const short = /^#([0-9a-fA-F])([0-9a-fA-F])([0-9a-fA-F])$/.exec(hex);
   const base = short ? `#${short[1]}${short[1]}${short[2]}${short[2]}${short[3]}${short[3]}` : hex;
@@ -74,7 +67,6 @@ export function Transformable({
   const sw = useSharedValue(w);
   const srot = useSharedValue(rot);
 
-  // ドラッグ／リサイズ／回転の開始値
   const startX = useSharedValue(0);
   const startY = useSharedValue(0);
   const startW = useSharedValue(0);
@@ -82,9 +74,6 @@ export function Transformable({
   const startDist = useSharedValue(1);
   const startAngle = useSharedValue(0);
 
-  // 外から値が変わった（undo・復元・別ページ・幅計測）ときに共有値を同期。
-  // 復元/インポートした座標や、狭い端末幅では要素が盤面外に出て掴めなくなるため、
-  // ここでも盤面内へクランプして常に選択・ドラッグできる位置で描画する。
   useEffect(() => {
     const clampedW = boundsWidth !== undefined ? Math.max(minW, Math.min(w, boundsWidth)) : w;
     const maxX = boundsWidth !== undefined ? Math.max(0, boundsWidth - clampedW) : Number.POSITIVE_INFINITY;
@@ -107,8 +96,6 @@ export function Transformable({
       startY.value = posY.value;
     })
     .onUpdate((e) => {
-      // 盤面の外（左・上、および領域幅を超える右）へ出て掴めなくならないよう位置を制限。
-      // 下方向は盤面が伸びるので上限なし。boundsWidth 未指定時は x,y>=0 のみ。
       const maxX = boundsWidth !== undefined ? Math.max(0, boundsWidth - sw.value) : 1e6;
       posX.value = Math.min(maxX, Math.max(0, startX.value + e.translationX));
       posY.value = Math.max(0, startY.value + e.translationY);
@@ -123,8 +110,6 @@ export function Transformable({
       runOnJS(onSelect)();
     });
 
-  // グリップでドラッグ（showDragHandle）or ドラッグ手段なし（接続モードのテキスト等）の
-  // ときは本体タップのみ。本体ドラッグはシール・写真（bodyDraggable）だけに限る。
   const bodyGesture = showDragHandle || !bodyDraggable ? tap : Gesture.Race(drag, tap);
 
   const resize = Gesture.Pan()
@@ -143,7 +128,6 @@ export function Transformable({
       const cy = m.pageY + m.height / 2;
       const d = Math.hypot(e.absoluteX - cx, e.absoluteY - cy);
       let next = Math.max(minW, Math.min(maxW, Math.round((startW.value * d) / startDist.value)));
-      // 左上を固定して右へ広がるので、現在位置から使える幅を超えない（右端で切れないように）
       if (boundsWidth !== undefined) next = Math.min(next, Math.max(minW, boundsWidth - posX.value));
       sw.value = next;
     })
@@ -218,7 +202,6 @@ const styles = StyleSheet.create({
     top: 0,
   },
   rootSelected: {
-    // 選択中は重なった他要素より前面へ。ハンドルや削除ボタンが隠れて押せなくなるのを防ぐ
     zIndex: 10,
   },
   body: {

@@ -2,7 +2,6 @@ import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import type { StyleProp, TextInputProps, TextStyle, ViewStyle } from "react-native";
 import { colors, fonts, radii } from "@/lib/theme";
 
-/** 半透明の白パネル（Web版の .create-panel / .board 周り） */
 export function Card({ children, style }: { children: React.ReactNode; style?: StyleProp<ViewStyle> }) {
   return <View style={[styles.card, style]}>{children}</View>;
 }

@@ -10,7 +10,6 @@ import Animated, {
 } from "react-native-reanimated";
 import { StickerShape } from "./StickerShape";
 
-/** ちらちら光る星ひとつ（Web版 .twinkle の keyframes tw を移植） */
 function Twinkle({ left, top, size, delay }: { left: number; top: number; size: number; delay: number }) {
   const progress = useSharedValue(0);
 
@@ -22,7 +21,6 @@ function Twinkle({ left, top, size, delay }: { left: number; top: number; size: 
   }, [progress, delay]);
 
   const style = useAnimatedStyle(() => {
-    // 0→0.5→1 で opacity 0→.85→0、scale .6→1→.6
     const t = progress.value;
     const pulse = 1 - Math.abs(t - 0.5) * 2;
     return {
@@ -38,7 +36,6 @@ function Twinkle({ left, top, size, delay }: { left: number; top: number; size: 
   );
 }
 
-/** sparkleOn のときだけ全画面に散る、環境演出のきらめきレイヤー */
 export function SparkleLayer({ active }: { active: boolean }) {
   const { width, height } = useWindowDimensions();
   const seeds = useMemo(

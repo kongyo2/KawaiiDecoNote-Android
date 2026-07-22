@@ -26,18 +26,15 @@ interface NotebooksState {
   initialize: () => void;
   recheckStorage: () => void;
   flushPending: () => void;
-  /** 直前の操作を1手戻す。保存に失敗していて戻せなかった場合は false */
   undo: () => boolean;
   importState: (state: AppState) => void;
 
-  /* 手帳（表紙） */
   createNotebook: (type: NotebookType, name: string, color: string) => string;
   deleteNotebook: (id: string) => void;
   renameNotebook: (id: string, name: string) => void;
   openNotebook: (id: string) => void;
   closeNotebook: () => void;
 
-  /* ページ */
   addPage: (type: PageType) => void;
   setActivePage: (id: string) => void;
   deletePage: (id: string) => boolean;
@@ -49,7 +46,6 @@ interface NotebooksState {
   setNote: (note: string) => void;
   resetPage: () => void;
 
-  /* 工程（flowchart） */
   addStep: () => void;
   addIfStep: () => void;
   setStepText: (stepId: string, text: string) => void;
@@ -57,30 +53,25 @@ interface NotebooksState {
   moveStep: (index: number, dir: -1 | 1) => void;
   deleteStep: (stepId: string) => void;
 
-  /* if分岐 */
   setBranchLabel: (stepId: string, key: BranchKey, label: string) => void;
   addBranchStep: (stepId: string, key: BranchKey) => void;
   setBranchStepText: (stepId: string, key: BranchKey, branchId: string, text: string) => void;
   toggleBranchStep: (stepId: string, key: BranchKey, branchId: string) => void;
   deleteBranchStep: (stepId: string, key: BranchKey, branchId: string) => void;
 
-  /* シール */
   addSticker: (type: StickerType, x: number, y: number) => void;
   updateSticker: (id: string, patch: Partial<Pick<Sticker, "x" | "y" | "rot" | "size">>) => void;
   deleteSticker: (id: string) => void;
 
-  /* フリーテキスト（notestyle） */
   addShape: (x: number, y: number) => void;
   setShapeText: (id: string, text: string) => void;
   updateShape: (id: string, patch: { x?: number; y?: number; w?: number; rot?: number }) => void;
   deleteShape: (id: string) => void;
 
-  /* 写真（notestyle）。選んだ時点のページに貼る（ピッカーの待ち時間中にページが変わっても取り違えない） */
   addPhotoTo: (notebookId: string, pageId: string, dataUrl: string, x: number, y: number) => void;
   updatePhoto: (id: string, patch: { x?: number; y?: number; w?: number; rot?: number }) => void;
   deletePhoto: (id: string) => void;
 
-  /* つなぎ線（notestyle） */
   addArrow: (from: string, to: string) => void;
   updateArrow: (
     id: string,
@@ -98,17 +89,10 @@ const CORRUPT_MESSAGE =
 export const useNotebooks = create<NotebooksState>()((set, get) => {
   let saveTimer: ReturnType<typeof setTimeout> | null = null;
   let dirty = false;
-  // 保留中（未保存）の変更バッチが undo 対象か。バッチに1つでもナビゲーション/構造変更が
-  // 混ざれば false。保存失敗時も保持して、定期リトライがこのフラグで保存するようにする
-  // （失敗した nav 保存を後からundo可能として再保存し、履歴のズレを蒸し返さないため）。
   let pendingUndoable = true;
   let lastCommitted: string | null = null;
   let undoStack: string[] = [];
-  // 保存データが壊れて読めなかった状態。storage自体の健全性チェック（recheck）では
-  // 消えないよう別に持つ。復元（importState）するまで警告を出し続ける。
   let loadCorrupt = false;
-  // 写真のbase64は巨大。undoスナップショットに丸ごと含めると数MB×最大15手でOOMになりうる。
-  // そこで blob はここに id ごとに1本だけ退避し、undoスナップショットは dataUrl を空にして持つ。
   const photoBlobs = new Map<string, string>();
 
   const capturePhotoBlobs = (doc: AppState): void => {
@@ -121,10 +105,8 @@ export const useNotebooks = create<NotebooksState>()((set, get) => {
     }
   };
 
-  /** undo用の軽量スナップショット文字列（写真の dataUrl は空にして blob を載せない） */
   const snapshotFor = (doc: AppState): string => JSON.stringify(doc, (key, value) => (key === "dataUrl" ? "" : value));
 
-  /** undoから復元した doc の写真 dataUrl を、退避してある blob で埋め戻す */
   const rehydratePhotos = (doc: AppState): AppState => {
     for (const nb of doc.notebooks) {
       for (const pg of nb.pages) {
@@ -136,11 +118,6 @@ export const useNotebooks = create<NotebooksState>()((set, get) => {
     return doc;
   };
 
-  /**
-   * どの undo ベースライン（lastCommitted と undoStack の各スナップショット）にも
-   * 出てこない写真 blob を捨てる。スナップショットは blob なしで軽いので走査は安い。
-   * これで「消した写真を undo で復元」に必要な blob は残しつつ、際限なく溜まるのを防ぐ。
-   */
   const pruneBlobs = (): void => {
     const referenced = new Set<string>();
     const collect = (snap: string | null): void => {
@@ -152,9 +129,7 @@ export const useNotebooks = create<NotebooksState>()((set, get) => {
             for (const ph of pg.photos) referenced.add(ph.id);
           }
         }
-      } catch {
-        // 壊れたスナップショットは無視（保守的に何も消さない方向へは倒さない）
-      }
+      } catch {}
     };
     collect(lastCommitted);
     for (const snap of undoStack) collect(snap);
@@ -170,24 +145,20 @@ export const useNotebooks = create<NotebooksState>()((set, get) => {
     }
     if (!dirty) return;
     const doc = get().doc;
-    capturePhotoBlobs(doc); // 現在の写真blobを退避（undoスナップショットには載せない）
-    const snapshot = snapshotFor(doc); // undo比較・スタック用（blobなし・軽量）
+    capturePhotoBlobs(doc);
+    const snapshot = snapshotFor(doc);
     try {
-      saveState(doc); // 実保存は写真込みのフルdoc（SQLiteへ）
-      // 書き込みが成功したときにだけ dirty をおろす。失敗時は true のままにして、
-      // 次の編集・アプリ復帰・定期リトライで再保存を試みる（保存失敗でも変更を失わない）。
+      saveState(doc);
       dirty = false;
       if (!get().storageOk) set({ storageOk: true, storageError: "" });
-      // ナビゲーションだけの変更（手帳の開閉・ページ切替・作成/削除）はundo対象にしない。
-      // undoで表示中のルートと state がずれて「見つかりません」に落ちるのを防ぐ。
       if (pendingUndoable && lastCommitted !== null && lastCommitted !== snapshot) {
         undoStack.push(lastCommitted);
         if (undoStack.length > MAX_UNDO) undoStack.shift();
         set({ canUndo: true });
       }
       lastCommitted = snapshot;
-      pendingUndoable = true; // バッチ確定。次のバッチはundo可能から数え直す
-      pruneBlobs(); // undoベースラインに残っていない写真blobだけ解放
+      pendingUndoable = true;
+      pruneBlobs();
     } catch (e) {
       const message = e instanceof Error ? `${e.name}: ${e.message}` : String(e);
       set({ storageOk: false, storageError: message });
@@ -208,33 +179,19 @@ export const useNotebooks = create<NotebooksState>()((set, get) => {
   const commit = (doc: AppState, opts?: CommitOpts): void => {
     const immediate = opts?.immediate ?? true;
     const undoable = opts?.undoable ?? true;
-    // 直前のデバウンス編集（タイトルやカードのテキスト入力）が未確定のまま、
-    // 別の即時アクション（削除など）が来たら、先にその編集を確定させておく。
-    // こうすると undo の復元先が「このアクションの直前（入力を含む）」になり、
-    // 消す直前に打った文字が失われない。連続テキスト入力は immediate:false なので巻き込まない。
     if (immediate && dirty) flushSave();
     set({ doc });
     dirty = true;
-    // バッチに nav 変更が混ざれば、このバッチ全体を undo 対象外にする
     pendingUndoable = pendingUndoable && undoable;
     if (immediate) flushSave();
     else scheduleSave();
     if (!undoable) {
-      // ナビゲーション/構造変更（手帳の開閉・作成・削除、ページ切替）をまたぐと、
-      // 以前のundoスナップショットは今の手帳/ページを含まず、復元するとルートと
-      // stateがずれて「見つかりません」に落ちる。undoは「今の文脈で直前にした編集」
-      // だけを対象にしたいので、ここで履歴を破棄する（新しいdocは上で保存済み）。
       undoStack = [];
-      // 写真blobは消さない。lastCommitted（nav後の新ベースライン）がまだ参照しており、
-      // 直後に写真を消して undo すると復元できなくなるため。不要分は次の flushSave の
-      // pruneBlobs が undoStack=[] を見て解放する。
       pruneBlobs();
       if (get().canUndo) set({ canUndo: false });
     }
   };
 
-  /** 保留中の未保存編集を強制的に書き出す（アプリのバックグラウンド化・定期リトライ用）。
-   * 保留バッチの undo 対象フラグ（pendingUndoable）を尊重して保存する。 */
   const flushPending = (): void => {
     if (dirty) flushSave();
   };
@@ -266,7 +223,6 @@ export const useNotebooks = create<NotebooksState>()((set, get) => {
       lastCommitted = snapshotFor(doc);
       undoStack = [];
       loadCorrupt = corrupt;
-      // 保存データが壊れていた場合は、上書き前に必ず気づけるよう警告を出す（生データは退避済み）
       set({
         ready: true,
         doc,
@@ -277,14 +233,9 @@ export const useNotebooks = create<NotebooksState>()((set, get) => {
     },
 
     recheckStorage: () => {
-      // 未保存の編集があるなら、診断の前に本当の保存を試す。診断用の小さなファイルが書けても、
-      // 本体(手帳)が未保存(dirty)のまま警告を消すと、次のフラッシュ前に落ちたとき最新の編集が
-      // 失われる。flushSave は成功で dirty を下ろし、失敗なら storageOk:false と保存エラーを残す。
       if (dirty) flushSave();
-      // まだ保存に失敗している(dirty)なら健全化しない（flushSave が入れた警告をそのまま残す）
       if (dirty) return;
       const diag = diagnoseStorage();
-      // storage が健全でも、壊れデータのロード警告は復元するまで消さない
       set({
         storageOk: diag.ok && !loadCorrupt,
         storageError: loadCorrupt ? CORRUPT_MESSAGE : diag.error,
@@ -292,20 +243,13 @@ export const useNotebooks = create<NotebooksState>()((set, get) => {
     },
 
     undo: () => {
-      // 保留中のデバウンス編集があれば先に確定して undo チェックポイントにする。
-      // これでタイプ直後（400ms以内）に↩️を押しても、まず直前の入力が1手戻る対象になり、
-      // 古いスナップショットへ飛んで最新の入力が失われるのを防ぐ。
-      // 保留中のデバウンス編集を先に確定。ここで保存が失敗（dirtyのまま）なら、
-      // undoで未保存の入力を捨てないよう中断する。
       if (dirty) {
         flushSave();
         if (dirty) return false;
       }
       const prev = undoStack.pop();
       if (prev === undefined) return false;
-      // スナップショットは写真blobを持たないので、退避してあるblobで埋め戻す
       const restored = rehydratePhotos(JSON.parse(prev) as AppState);
-      // どの手帳を開いているか（ルーター主導のナビゲーション）はundoで変えない
       restored.activeNotebookId = get().doc.activeNotebookId;
       lastCommitted = snapshotFor(restored);
       set({ doc: restored, canUndo: undoStack.length > 0 });
@@ -320,7 +264,7 @@ export const useNotebooks = create<NotebooksState>()((set, get) => {
       capturePhotoBlobs(state);
       lastCommitted = snapshotFor(state);
       undoStack = [];
-      loadCorrupt = false; // 復元できたので壊れデータ警告は解除
+      loadCorrupt = false;
       set({ doc: state, canUndo: false });
       dirty = true;
       pendingUndoable = false;
@@ -329,9 +273,6 @@ export const useNotebooks = create<NotebooksState>()((set, get) => {
 
     flushPending,
 
-    /* ---------------- 手帳 ---------------- */
-
-    // 手帳の作成・削除・開閉・ページ切替はナビゲーション操作。undo対象にしない。
     createNotebook: (type, name, color) => {
       const nb = newNotebook(type, name, color);
       const doc = get().doc;
@@ -358,8 +299,6 @@ export const useNotebooks = create<NotebooksState>()((set, get) => {
     openNotebook: (id) => commit({ ...get().doc, activeNotebookId: id }, { undoable: false }),
     closeNotebook: () => commit({ ...get().doc, activeNotebookId: null }, { undoable: false }),
 
-    /* ---------------- ページ ---------------- */
-
     addPage: (type) =>
       commit(
         mapActiveNotebook((nb) => {
@@ -369,9 +308,6 @@ export const useNotebooks = create<NotebooksState>()((set, get) => {
         { undoable: false },
       ),
 
-    // 実際にページが変わるときだけコミットする。すでに選択中／存在しないID
-    // （削除ボタンのタップが親タブに伝わったケース等）では何もしない。
-    // 無駄なコミットで undo 履歴が消える／消したページを選び直す事故を防ぐ。
     setActivePage: (id) => {
       const doc = get().doc;
       const nb = doc.notebooks.find((n) => n.id === doc.activeNotebookId);
@@ -386,9 +322,6 @@ export const useNotebooks = create<NotebooksState>()((set, get) => {
       const doc = get().doc;
       const nb = doc.notebooks.find((n) => n.id === doc.activeNotebookId);
       if (!nb || nb.pages.length <= 1) return false;
-      // ページ削除は activePageId を動かす構造/ナビ変更。addPage や setActivePage と同様に
-      // undo 対象外にする（さもないと削除ページ確定が undo スナップショットになり、以後の
-      // ↩️ が「新ページでの編集」ではなく削除ページの復活に消費されて文脈がズレる）。
       commit(
         mapActiveNotebook((n) => {
           const idx = n.pages.findIndex((p) => p.id === id);
@@ -421,8 +354,6 @@ export const useNotebooks = create<NotebooksState>()((set, get) => {
 
     resetPage: () =>
       commit(mapActivePage((pg) => ({ ...pg, steps: [], stickers: [], shapes: [], photos: [], arrows: [], note: "" }))),
-
-    /* ---------------- 工程 ---------------- */
 
     addStep: () => commit(mapActivePage((pg) => ({ ...pg, steps: [...pg.steps, newStep()] }))),
     addIfStep: () => commit(mapActivePage((pg) => ({ ...pg, steps: [...pg.steps, newIfStep()] }))),
@@ -467,8 +398,6 @@ export const useNotebooks = create<NotebooksState>()((set, get) => {
       ),
 
     deleteStep: (stepId) => commit(mapActivePage((pg) => ({ ...pg, steps: pg.steps.filter((s) => s.id !== stepId) }))),
-
-    /* ---------------- if分岐 ---------------- */
 
     setBranchLabel: (stepId, key, label) =>
       commit(
@@ -539,8 +468,6 @@ export const useNotebooks = create<NotebooksState>()((set, get) => {
         })),
       ),
 
-    /* ---------------- シール ---------------- */
-
     addSticker: (type, x, y) =>
       commit(
         mapActivePage((pg) => ({
@@ -558,8 +485,6 @@ export const useNotebooks = create<NotebooksState>()((set, get) => {
       ),
 
     deleteSticker: (id) => commit(mapActivePage((pg) => ({ ...pg, stickers: pg.stickers.filter((s) => s.id !== id) }))),
-
-    /* ---------------- フリーテキスト ---------------- */
 
     addShape: (x, y) =>
       commit(
@@ -587,8 +512,6 @@ export const useNotebooks = create<NotebooksState>()((set, get) => {
         })),
       ),
 
-    /* ---------------- 写真 ---------------- */
-
     addPhotoTo: (notebookId, pageId, dataUrl, x, y) => {
       const doc = get().doc;
       commit({
@@ -613,13 +536,9 @@ export const useNotebooks = create<NotebooksState>()((set, get) => {
 
     deletePhoto: (id) => commit(mapActivePage((pg) => ({ ...pg, photos: pg.photos.filter((p) => p.id !== id) }))),
 
-    /* ---------------- つなぎ線 ---------------- */
-
     addArrow: (from, to) =>
       commit(
         mapActivePage((pg) => {
-          // 両端のテキストが実在するときだけ線を張る（undo/リセットで消えたカードを
-          // 指したまま接続すると、見えない線がデータに残るのを防ぐ）
           const bothExist = pg.shapes.some((s) => s.id === from) && pg.shapes.some((s) => s.id === to);
           if (from === to || !bothExist || pg.arrows.some((a) => a.from === from && a.to === to)) return pg;
           return {
@@ -640,8 +559,6 @@ export const useNotebooks = create<NotebooksState>()((set, get) => {
     deleteArrow: (id) => commit(mapActivePage((pg) => ({ ...pg, arrows: pg.arrows.filter((a) => a.id !== id) }))),
   };
 });
-
-/* ---------------- セレクタ ---------------- */
 
 export function selectCurrentNotebook(s: NotebooksState): Notebook | undefined {
   return s.doc.notebooks.find((n) => n.id === s.doc.activeNotebookId);

@@ -4,7 +4,6 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { colors, fonts } from "@/lib/theme";
 import { useUi } from "@/state/ui";
 
-/** 画面下にそっと出るトースト（Web版の .toast） */
 export function Toast() {
   const toast = useUi((s) => s.toast);
   const insets = useSafeAreaInsets();

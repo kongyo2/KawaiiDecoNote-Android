@@ -29,7 +29,6 @@ function Sprite({ index }: { index: number }) {
   );
 }
 
-/** チェックを付けたときの、シールが弾ける小さな演出（Web版 burstConfetti） */
 export function Confetti() {
   return (
     <View style={styles.wrap} pointerEvents="none">

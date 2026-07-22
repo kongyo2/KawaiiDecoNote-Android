@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 import Svg, { Circle, Path } from "react-native-svg";
 import { colors, radii } from "@/lib/theme";
@@ -45,6 +45,7 @@ const FRAME_STYLE: Record<Page["frame"], object> = {
 export function BoardFrame({ page, children }: { page: Page; children: ReactNode }) {
   const selectedId = useUi((s) => s.selectedId);
   const select = useUi((s) => s.select);
+  const [contentW, setContentW] = useState<number | undefined>(undefined);
 
   // シールを盤面の下方向にドラッグしても切れないよう、シールの下端まで盤面を伸ばす。
   // （シールは content と同じ原点に絶対配置されるので content の minHeight で伸ばせる）
@@ -61,7 +62,12 @@ export function BoardFrame({ page, children }: { page: Page; children: ReactNode
         <Corner frame={page.frame} style={styles.bl} />
         <Corner frame={page.frame} style={styles.br} />
 
-        <View style={[styles.content, stickerExtent > 0 ? { minHeight: stickerExtent } : null]}>{children}</View>
+        <View
+          style={[styles.content, stickerExtent > 0 ? { minHeight: stickerExtent } : null]}
+          onLayout={(e) => setContentW(e.nativeEvent.layout.width)}
+        >
+          {children}
+        </View>
 
         {page.stickers.map((sticker) => (
           <StickerItem
@@ -70,6 +76,7 @@ export function BoardFrame({ page, children }: { page: Page; children: ReactNode
             selected={selectedId === sticker.id}
             chic={false}
             onSelect={() => select(sticker.id)}
+            boundsWidth={contentW}
           />
         ))}
       </View>

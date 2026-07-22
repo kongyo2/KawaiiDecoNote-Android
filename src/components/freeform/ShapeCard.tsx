@@ -16,6 +16,7 @@ export function ShapeCard({
   onSelect,
   onConnectTap,
   onMeasureHeight,
+  boundsWidth,
 }: {
   shape: Shape;
   selected: boolean;
@@ -24,6 +25,7 @@ export function ShapeCard({
   onSelect: () => void;
   onConnectTap: (id: string) => void;
   onMeasureHeight: (id: string, height: number) => void;
+  boundsWidth?: number | undefined;
 }) {
   const setShapeText = useNotebooks((s) => s.setShapeText);
   const updateShape = useNotebooks((s) => s.updateShape);
@@ -44,6 +46,7 @@ export function ShapeCard({
       bodyDraggable={false}
       showDragHandle={!connectMode}
       handleTint={CHIC_HANDLE}
+      boundsWidth={boundsWidth}
       onSelect={() => (connectMode ? onConnectTap(shape.id) : onSelect())}
       onChange={onChange}
       onDelete={() => deleteShape(shape.id)}

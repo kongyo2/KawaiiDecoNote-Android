@@ -31,6 +31,7 @@ export default function NotebookEditor() {
   const notebook = useNotebooks(selectCurrentNotebook);
   const page = useNotebooks(selectCurrentPage);
   const canUndo = useNotebooks((s) => s.canUndo);
+  const storageOk = useNotebooks((s) => s.storageOk);
 
   const setActivePage = useNotebooks((s) => s.setActivePage);
   const deletePage = useNotebooks((s) => s.deletePage);
@@ -231,6 +232,14 @@ export default function NotebookEditor() {
         </View>
       </ScrollView>
 
+      {/* 保存に失敗しているときは編集画面でも警告（Web版は cover だけだった）。
+          タップでそのままバックアップ書き出しへ誘導する。 */}
+      {!storageOk ? (
+        <Pressable style={[styles.saveWarn, { top: insets.top + 6 }]} onPress={onExport}>
+          <Text style={styles.saveWarnText}>⚠️ 保存できていません。タップして「💾書き出し」でバックアップを</Text>
+        </Pressable>
+      ) : null}
+
       <StickerTray
         isNoteStyle={isNoteStyle}
         sparkleOn={page.sparkleOn}
@@ -318,5 +327,23 @@ const styles = StyleSheet.create({
     fontFamily: fonts.body,
     fontSize: 14,
     color: colors.ink,
+  },
+  saveWarn: {
+    position: "absolute",
+    left: 12,
+    right: 12,
+    backgroundColor: "#fff3e0",
+    borderWidth: 1.5,
+    borderColor: "#f0b86e",
+    borderRadius: 12,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    zIndex: 50,
+  },
+  saveWarnText: {
+    fontFamily: fonts.body,
+    fontSize: 12,
+    color: "#7a4a12",
+    textAlign: "center",
   },
 });

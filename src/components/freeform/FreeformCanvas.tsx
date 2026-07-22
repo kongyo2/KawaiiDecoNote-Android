@@ -17,6 +17,7 @@ export function FreeformCanvas({ page }: { page: Page }) {
   const connectFromId = useUi((s) => s.connectFromId);
   const setConnectFrom = useUi((s) => s.setConnectFrom);
   const [heights, setHeights] = useState<Record<string, number>>({});
+  const [canvasW, setCanvasW] = useState<number | undefined>(undefined);
 
   const onMeasureHeight = (id: string, height: number) => {
     setHeights((prev) => (prev[id] === height ? prev : { ...prev, [id]: height }));
@@ -48,7 +49,7 @@ export function FreeformCanvas({ page }: { page: Page }) {
   }, [page.shapes, page.photos, page.stickers, heights]);
 
   return (
-    <View style={[styles.canvas, { minHeight }]}>
+    <View style={[styles.canvas, { minHeight }]} onLayout={(e) => setCanvasW(e.nativeEvent.layout.width)}>
       <Pressable style={StyleSheet.absoluteFill} onPress={() => select(null)} />
 
       {isEmpty ? (
@@ -69,6 +70,7 @@ export function FreeformCanvas({ page }: { page: Page }) {
           onSelect={() => select(shape.id)}
           onConnectTap={onConnectTap}
           onMeasureHeight={onMeasureHeight}
+          boundsWidth={canvasW}
         />
       ))}
 
@@ -79,6 +81,7 @@ export function FreeformCanvas({ page }: { page: Page }) {
           selected={selectedId === photo.id}
           onSelect={() => select(photo.id)}
           onMeasureHeight={onMeasureHeight}
+          boundsWidth={canvasW}
         />
       ))}
 
@@ -89,6 +92,7 @@ export function FreeformCanvas({ page }: { page: Page }) {
           selected={selectedId === sticker.id}
           chic
           onSelect={() => select(sticker.id)}
+          boundsWidth={canvasW}
         />
       ))}
 

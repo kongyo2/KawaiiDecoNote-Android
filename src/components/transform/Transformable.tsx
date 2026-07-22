@@ -31,6 +31,8 @@ interface TransformableProps {
   rotatable?: boolean;
   /** ハンドルの色（notestyleのシックモードは黒系） */
   handleTint?: string;
+  /** 置ける領域の幅。ドラッグ位置を [0, boundsWidth - 幅] に収める（未指定なら x,y>=0 のみ） */
+  boundsWidth?: number | undefined;
   onSelect: () => void;
   onChange: (patch: TransformPatch) => void;
   onDelete?: () => void;
@@ -60,6 +62,7 @@ export function Transformable({
   resizable = true,
   rotatable = true,
   handleTint = colors.plum,
+  boundsWidth,
   onSelect,
   onChange,
   onDelete,
@@ -100,8 +103,11 @@ export function Transformable({
       startY.value = posY.value;
     })
     .onUpdate((e) => {
-      posX.value = startX.value + e.translationX;
-      posY.value = startY.value + e.translationY;
+      // 盤面の外（左・上、および領域幅を超える右）へ出て掴めなくならないよう位置を制限。
+      // 下方向は盤面が伸びるので上限なし。boundsWidth 未指定時は x,y>=0 のみ。
+      const maxX = boundsWidth !== undefined ? Math.max(0, boundsWidth - sw.value) : 1e6;
+      posX.value = Math.min(maxX, Math.max(0, startX.value + e.translationX));
+      posY.value = Math.max(0, startY.value + e.translationY);
     })
     .onEnd(() => {
       runOnJS(onChange)({ x: Math.round(posX.value), y: Math.round(posY.value) });

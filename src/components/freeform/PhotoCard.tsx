@@ -13,11 +13,13 @@ export function PhotoCard({
   selected,
   onSelect,
   onMeasureHeight,
+  boundsWidth,
 }: {
   photo: Photo;
   selected: boolean;
   onSelect: () => void;
   onMeasureHeight: (id: string, height: number) => void;
+  boundsWidth?: number | undefined;
 }) {
   const updatePhoto = useNotebooks((s) => s.updatePhoto);
   const deletePhoto = useNotebooks((s) => s.deletePhoto);
@@ -50,6 +52,7 @@ export function PhotoCard({
       selected={selected}
       bodyDraggable
       handleTint={CHIC_HANDLE}
+      boundsWidth={boundsWidth}
       onSelect={onSelect}
       onChange={onChange}
       onDelete={() => deletePhoto(photo.id)}

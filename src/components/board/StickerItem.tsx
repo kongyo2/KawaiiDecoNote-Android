@@ -10,11 +10,13 @@ export function StickerItem({
   selected,
   chic,
   onSelect,
+  boundsWidth,
 }: {
   sticker: Sticker;
   selected: boolean;
   chic: boolean;
   onSelect: () => void;
+  boundsWidth?: number | undefined;
 }) {
   const updateSticker = useNotebooks((s) => s.updateSticker);
   const deleteSticker = useNotebooks((s) => s.deleteSticker);
@@ -41,6 +43,7 @@ export function StickerItem({
       selected={selected}
       bodyDraggable
       handleTint={chic ? "#555" : colors.plum}
+      boundsWidth={boundsWidth}
       onSelect={onSelect}
       onChange={onChange}
       onDelete={() => deleteSticker(sticker.id)}

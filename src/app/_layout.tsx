@@ -14,6 +14,7 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 import { Background } from "@/components/ui/Background";
 import { SparkleLayer } from "@/components/ui/SparkleLayer";
 import { Toast } from "@/components/ui/Toast";
+import { recoverPendingPhotoAsDataUrl } from "@/lib/files";
 import { colors } from "@/lib/theme";
 import { selectCurrentNotebook, selectCurrentPage, useNotebooks } from "@/state/notebooks";
 
@@ -48,6 +49,22 @@ export default function RootLayout() {
   useEffect(() => {
     const id = setInterval(() => useNotebooks.getState().flushPending(), 8000);
     return () => clearInterval(id);
+  }, []);
+
+  // Android: 写真ピッカー中にアクティビティが破棄されても、復帰時に選択結果を拾って
+  // 開いている手帳のページに貼る（貼り先が無ければ捨てる）
+  useEffect(() => {
+    const recover = async () => {
+      const dataUrl = await recoverPendingPhotoAsDataUrl();
+      if (!dataUrl) return;
+      const st = useNotebooks.getState();
+      if (st.doc.activeNotebookId) st.addPhoto(dataUrl, 16, 16);
+    };
+    void recover();
+    const sub = AppState.addEventListener("change", (state) => {
+      if (state === "active") void recover();
+    });
+    return () => sub.remove();
   }, []);
 
   useEffect(() => {

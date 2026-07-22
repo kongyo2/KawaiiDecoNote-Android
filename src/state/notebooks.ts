@@ -251,13 +251,18 @@ export const useNotebooks = create<NotebooksState>()((set, get) => {
     canUndo: false,
 
     initialize: () => {
-      const doc = loadState();
+      const { state: doc, corrupt } = loadState();
       const diag = diagnoseStorage();
       photoBlobs.clear();
       capturePhotoBlobs(doc);
       lastCommitted = snapshotFor(doc);
       undoStack = [];
-      set({ ready: true, doc, storageOk: diag.ok, storageError: diag.error, canUndo: false });
+      // 保存データが壊れていた場合は、上書き前に必ず気づけるよう警告を出す（生データは退避済み）
+      const ok = diag.ok && !corrupt;
+      const error = corrupt
+        ? "保存データが壊れていて読めませんでした。壊れたデータは退避しました。新しく編集して上書きする前に、必要なら「📂 読み込み」でバックアップから復元してください。"
+        : diag.error;
+      set({ ready: true, doc, storageOk: ok, storageError: error, canUndo: false });
     },
 
     recheckStorage: () => {

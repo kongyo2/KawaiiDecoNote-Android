@@ -13,19 +13,29 @@ interface Geo {
 
 const ARROW_COLOR = "#888";
 
-function centerOf(shape: Shape, height: number): { cx: number; cy: number } {
-  return { cx: shape.x + shape.w / 2, cy: shape.y + (height || 44) / 2 };
+// カードは Transformable 側で盤面内へクランプ描画される。矢印の端点も同じ式で
+// クランプして、復元/インポート座標がはみ出していても線が実際の描画位置を指すようにする。
+function centerOf(shape: Shape, height: number, boundsWidth: number | undefined): { cx: number; cy: number } {
+  const maxX = boundsWidth !== undefined ? Math.max(0, boundsWidth - shape.w) : Number.POSITIVE_INFINITY;
+  const x = Math.min(maxX, Math.max(0, shape.x));
+  const y = Math.max(0, shape.y);
+  return { cx: x + shape.w / 2, cy: y + (height || 44) / 2 };
 }
 
-function geometryFor(arrow: Arrow, shapes: Shape[], heights: Record<string, number>): Geo | null {
+function geometryFor(
+  arrow: Arrow,
+  shapes: Shape[],
+  heights: Record<string, number>,
+  boundsWidth: number | undefined,
+): Geo | null {
   if (arrow.manual && arrow.length > 0) {
     return { mx: arrow.mx, my: arrow.my, length: arrow.length, angle: arrow.angle };
   }
   const from = shapes.find((s) => s.id === arrow.from);
   const to = shapes.find((s) => s.id === arrow.to);
   if (!from || !to) return null;
-  const a = centerOf(from, heights[from.id] ?? 44);
-  const b = centerOf(to, heights[to.id] ?? 44);
+  const a = centerOf(from, heights[from.id] ?? 44, boundsWidth);
+  const b = centerOf(to, heights[to.id] ?? 44, boundsWidth);
   const dx = b.cx - a.cx;
   const dy = b.cy - a.cy;
   return {
@@ -75,15 +85,17 @@ export function ArrowLayer({
   page,
   heights,
   selectedId,
+  boundsWidth,
 }: {
   page: Page;
   heights: Record<string, number>;
   selectedId: string | null;
+  boundsWidth?: number | undefined;
 }) {
   return (
     <>
       {page.arrows.map((arrow) => {
-        const geo = geometryFor(arrow, page.shapes, heights);
+        const geo = geometryFor(arrow, page.shapes, heights, boundsWidth);
         if (!geo) return null;
         return <ArrowItem key={arrow.id} arrow={arrow} geo={geo} selected={selectedId === arrow.id} />;
       })}

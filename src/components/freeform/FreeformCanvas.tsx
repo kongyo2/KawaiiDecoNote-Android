@@ -58,7 +58,7 @@ export function FreeformCanvas({ page }: { page: Page }) {
         </Text>
       ) : null}
 
-      <ArrowLayer page={page} heights={heights} selectedId={selectedId} />
+      <ArrowLayer page={page} heights={heights} selectedId={selectedId} boundsWidth={canvasW} />
 
       {page.shapes.map((shape) => (
         <ShapeCard

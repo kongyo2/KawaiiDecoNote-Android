@@ -99,6 +99,34 @@ export const useNotebooks = create<NotebooksState>()((set, get) => {
   let pendingUndoable = true;
   let lastCommitted: string | null = null;
   let undoStack: string[] = [];
+  // 写真のbase64は巨大。undoスナップショットに丸ごと含めると数MB×最大15手でOOMになりうる。
+  // そこで blob はここに id ごとに1本だけ退避し、undoスナップショットは dataUrl を空にして持つ。
+  const photoBlobs = new Map<string, string>();
+
+  const capturePhotoBlobs = (doc: AppState): void => {
+    for (const nb of doc.notebooks) {
+      for (const pg of nb.pages) {
+        for (const ph of pg.photos) {
+          if (ph.dataUrl) photoBlobs.set(ph.id, ph.dataUrl);
+        }
+      }
+    }
+  };
+
+  /** undo用の軽量スナップショット文字列（写真の dataUrl は空にして blob を載せない） */
+  const snapshotFor = (doc: AppState): string => JSON.stringify(doc, (key, value) => (key === "dataUrl" ? "" : value));
+
+  /** undoから復元した doc の写真 dataUrl を、退避してある blob で埋め戻す */
+  const rehydratePhotos = (doc: AppState): AppState => {
+    for (const nb of doc.notebooks) {
+      for (const pg of nb.pages) {
+        for (const ph of pg.photos) {
+          if (!ph.dataUrl) ph.dataUrl = photoBlobs.get(ph.id) ?? "";
+        }
+      }
+    }
+    return doc;
+  };
 
   const flushSave = (): void => {
     if (saveTimer) {
@@ -107,9 +135,10 @@ export const useNotebooks = create<NotebooksState>()((set, get) => {
     }
     if (!dirty) return;
     const doc = get().doc;
-    const snapshot = JSON.stringify(doc);
+    capturePhotoBlobs(doc); // 現在の写真blobを退避（undoスナップショットには載せない）
+    const snapshot = snapshotFor(doc); // undo比較・スタック用（blobなし・軽量）
     try {
-      saveState(doc);
+      saveState(doc); // 実保存は写真込みのフルdoc（SQLiteへ）
       // 書き込みが成功したときにだけ dirty をおろす。失敗時は true のままにして、
       // 次の編集・アプリ復帰・定期リトライで再保存を試みる（保存失敗でも変更を失わない）。
       dirty = false;
@@ -160,6 +189,8 @@ export const useNotebooks = create<NotebooksState>()((set, get) => {
       // stateがずれて「見つかりません」に落ちる。undoは「今の文脈で直前にした編集」
       // だけを対象にしたいので、ここで履歴を破棄する（新しいdocは上で保存済み）。
       undoStack = [];
+      // undo履歴を捨てたら、退避していた写真blobも不要（次の編集時に現docから採り直す）
+      photoBlobs.clear();
       if (get().canUndo) set({ canUndo: false });
     }
   };
@@ -192,7 +223,9 @@ export const useNotebooks = create<NotebooksState>()((set, get) => {
     initialize: () => {
       const doc = loadState();
       const diag = diagnoseStorage();
-      lastCommitted = JSON.stringify(doc);
+      photoBlobs.clear();
+      capturePhotoBlobs(doc);
+      lastCommitted = snapshotFor(doc);
       undoStack = [];
       set({ ready: true, doc, storageOk: diag.ok, storageError: diag.error, canUndo: false });
     },
@@ -209,10 +242,11 @@ export const useNotebooks = create<NotebooksState>()((set, get) => {
       if (dirty) flushSave();
       const prev = undoStack.pop();
       if (prev === undefined) return;
-      const restored = JSON.parse(prev) as AppState;
+      // スナップショットは写真blobを持たないので、退避してあるblobで埋め戻す
+      const restored = rehydratePhotos(JSON.parse(prev) as AppState);
       // どの手帳を開いているか（ルーター主導のナビゲーション）はundoで変えない
       restored.activeNotebookId = get().doc.activeNotebookId;
-      lastCommitted = JSON.stringify(restored);
+      lastCommitted = snapshotFor(restored);
       set({ doc: restored, canUndo: undoStack.length > 0 });
       dirty = true;
       pendingUndoable = false;
@@ -220,7 +254,9 @@ export const useNotebooks = create<NotebooksState>()((set, get) => {
     },
 
     importState: (state) => {
-      lastCommitted = JSON.stringify(state);
+      photoBlobs.clear();
+      capturePhotoBlobs(state);
+      lastCommitted = snapshotFor(state);
       undoStack = [];
       set({ doc: state, canUndo: false });
       dirty = true;

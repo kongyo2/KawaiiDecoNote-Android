@@ -167,7 +167,7 @@ export function Transformable({
     });
 
   return (
-    <Animated.View ref={aref} style={[styles.root, animStyle]}>
+    <Animated.View ref={aref} style={[styles.root, selected ? styles.rootSelected : null, animStyle]}>
       <GestureDetector gesture={bodyGesture}>
         <View style={styles.body}>{children}</View>
       </GestureDetector>
@@ -210,6 +210,10 @@ const styles = StyleSheet.create({
     position: "absolute",
     left: 0,
     top: 0,
+  },
+  rootSelected: {
+    // 選択中は重なった他要素より前面へ。ハンドルや削除ボタンが隠れて押せなくなるのを防ぐ
+    zIndex: 10,
   },
   body: {
     width: "100%",

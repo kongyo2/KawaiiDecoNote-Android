@@ -34,8 +34,12 @@ export function PromptModal({
 
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onCancel}>
-      <Pressable style={styles.backdrop} onPress={onCancel}>
-        <Pressable style={styles.card} onPress={() => {}}>
+      <View style={styles.backdrop}>
+        {/* 閉じる用の背景タップは、カードの「背面」に別Pressableとして置く。
+            カード内（入力欄・ボタン）のタップが背景のonCancelへ伝わって、
+            入力やフォーカスのつもりが閉じてしまう事故を防ぐ。 */}
+        <Pressable style={StyleSheet.absoluteFill} onPress={onCancel} />
+        <View style={styles.card}>
           <Text style={styles.title}>{title}</Text>
           <AppTextInput
             value={value}
@@ -54,8 +58,8 @@ export function PromptModal({
               style={styles.flex}
             />
           </View>
-        </Pressable>
-      </Pressable>
+        </View>
+      </View>
     </Modal>
   );
 }

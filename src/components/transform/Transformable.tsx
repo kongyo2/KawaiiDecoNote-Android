@@ -82,13 +82,17 @@ export function Transformable({
   const startDist = useSharedValue(1);
   const startAngle = useSharedValue(0);
 
-  // 外から値が変わった（undo・復元・別ページ）ときに共有値を同期
+  // 外から値が変わった（undo・復元・別ページ・幅計測）ときに共有値を同期。
+  // 復元/インポートした座標や、狭い端末幅では要素が盤面外に出て掴めなくなるため、
+  // ここでも盤面内へクランプして常に選択・ドラッグできる位置で描画する。
   useEffect(() => {
-    posX.value = x;
-    posY.value = y;
-    sw.value = w;
+    const clampedW = boundsWidth !== undefined ? Math.max(minW, Math.min(w, boundsWidth)) : w;
+    const maxX = boundsWidth !== undefined ? Math.max(0, boundsWidth - clampedW) : Number.POSITIVE_INFINITY;
+    posX.value = Math.min(maxX, Math.max(0, x));
+    posY.value = Math.max(0, y);
+    sw.value = clampedW;
     srot.value = rot;
-  }, [x, y, w, rot, posX, posY, sw, srot]);
+  }, [x, y, w, rot, boundsWidth, minW, posX, posY, sw, srot]);
 
   const animStyle = useAnimatedStyle(() => ({
     transform: [{ translateX: posX.value }, { translateY: posY.value }, { rotate: `${srot.value}deg` }],

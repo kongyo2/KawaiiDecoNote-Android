@@ -128,6 +128,33 @@ export const useNotebooks = create<NotebooksState>()((set, get) => {
     return doc;
   };
 
+  /**
+   * どの undo ベースライン（lastCommitted と undoStack の各スナップショット）にも
+   * 出てこない写真 blob を捨てる。スナップショットは blob なしで軽いので走査は安い。
+   * これで「消した写真を undo で復元」に必要な blob は残しつつ、際限なく溜まるのを防ぐ。
+   */
+  const pruneBlobs = (): void => {
+    const referenced = new Set<string>();
+    const collect = (snap: string | null): void => {
+      if (!snap) return;
+      try {
+        const d = JSON.parse(snap) as AppState;
+        for (const nb of d.notebooks) {
+          for (const pg of nb.pages) {
+            for (const ph of pg.photos) referenced.add(ph.id);
+          }
+        }
+      } catch {
+        // 壊れたスナップショットは無視（保守的に何も消さない方向へは倒さない）
+      }
+    };
+    collect(lastCommitted);
+    for (const snap of undoStack) collect(snap);
+    for (const id of [...photoBlobs.keys()]) {
+      if (!referenced.has(id)) photoBlobs.delete(id);
+    }
+  };
+
   const flushSave = (): void => {
     if (saveTimer) {
       clearTimeout(saveTimer);
@@ -152,6 +179,7 @@ export const useNotebooks = create<NotebooksState>()((set, get) => {
       }
       lastCommitted = snapshot;
       pendingUndoable = true; // バッチ確定。次のバッチはundo可能から数え直す
+      pruneBlobs(); // undoベースラインに残っていない写真blobだけ解放
     } catch (e) {
       const message = e instanceof Error ? `${e.name}: ${e.message}` : String(e);
       set({ storageOk: false, storageError: message });
@@ -189,8 +217,10 @@ export const useNotebooks = create<NotebooksState>()((set, get) => {
       // stateがずれて「見つかりません」に落ちる。undoは「今の文脈で直前にした編集」
       // だけを対象にしたいので、ここで履歴を破棄する（新しいdocは上で保存済み）。
       undoStack = [];
-      // undo履歴を捨てたら、退避していた写真blobも不要（次の編集時に現docから採り直す）
-      photoBlobs.clear();
+      // 写真blobは消さない。lastCommitted（nav後の新ベースライン）がまだ参照しており、
+      // 直後に写真を消して undo すると復元できなくなるため。不要分は次の flushSave の
+      // pruneBlobs が undoStack=[] を見て解放する。
+      pruneBlobs();
       if (get().canUndo) set({ canUndo: false });
     }
   };

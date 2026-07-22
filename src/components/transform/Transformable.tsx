@@ -138,8 +138,10 @@ export function Transformable({
       const cx = m.pageX + m.width / 2;
       const cy = m.pageY + m.height / 2;
       const d = Math.hypot(e.absoluteX - cx, e.absoluteY - cy);
-      const next = Math.round((startW.value * d) / startDist.value);
-      sw.value = Math.max(minW, Math.min(maxW, next));
+      let next = Math.max(minW, Math.min(maxW, Math.round((startW.value * d) / startDist.value)));
+      // 左上を固定して右へ広がるので、現在位置から使える幅を超えない（右端で切れないように）
+      if (boundsWidth !== undefined) next = Math.min(next, Math.max(minW, boundsWidth - posX.value));
+      sw.value = next;
     })
     .onEnd(() => {
       runOnJS(onChange)({ w: Math.round(sw.value) });

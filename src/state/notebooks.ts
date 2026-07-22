@@ -203,6 +203,10 @@ export const useNotebooks = create<NotebooksState>()((set, get) => {
     },
 
     undo: () => {
+      // 保留中のデバウンス編集があれば先に確定して undo チェックポイントにする。
+      // これでタイプ直後（400ms以内）に↩️を押しても、まず直前の入力が1手戻る対象になり、
+      // 古いスナップショットへ飛んで最新の入力が失われるのを防ぐ。
+      if (dirty) flushSave();
       const prev = undoStack.pop();
       if (prev === undefined) return;
       const restored = JSON.parse(prev) as AppState;

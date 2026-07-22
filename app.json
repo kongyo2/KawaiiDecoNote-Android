@@ -39,7 +39,9 @@
       [
         "expo-image-picker",
         {
-          "photosPermission": "手帳に貼る写真を選ぶためにフォトライブラリを使います。"
+          "photosPermission": "手帳に貼る写真を選ぶためにフォトライブラリを使います。",
+          "cameraPermission": false,
+          "microphonePermission": false
         }
       ]
     ],

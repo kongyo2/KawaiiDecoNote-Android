@@ -149,3 +149,9 @@ export const PAPER_COLORS = [
 export const STICKER_MIN_SIZE = 20;
 export const STICKER_MAX_SIZE = 160;
 export const STICKER_DEFAULT_SIZE = 44;
+
+/** フリーテキストの幅(px)。transform操作(ShapeCard)の下限/上限と、取り込み正規化の
+ *  クランプで共有する。 */
+export const SHAPE_MIN_WIDTH = 80;
+export const SHAPE_MAX_WIDTH = 420;
+export const SHAPE_DEFAULT_WIDTH = 150;

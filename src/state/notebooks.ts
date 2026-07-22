@@ -1,7 +1,7 @@
 import { create } from "zustand";
 import { diagnoseStorage, emptyState, loadState, saveState } from "@/lib/store";
 import { newBranchStep, newId, newIfStep, newNotebook, newPage, newStep } from "@/lib/model";
-import { STICKER_DEFAULT_SIZE } from "@/lib/types";
+import { SHAPE_DEFAULT_WIDTH, STICKER_DEFAULT_SIZE } from "@/lib/types";
 import type {
   AppState,
   Frame,
@@ -382,6 +382,9 @@ export const useNotebooks = create<NotebooksState>()((set, get) => {
       const doc = get().doc;
       const nb = doc.notebooks.find((n) => n.id === doc.activeNotebookId);
       if (!nb || nb.pages.length <= 1) return false;
+      // ページ削除は activePageId を動かす構造/ナビ変更。addPage や setActivePage と同様に
+      // undo 対象外にする（さもないと削除ページ確定が undo スナップショットになり、以後の
+      // ↩️ が「新ページでの編集」ではなく削除ページの復活に消費されて文脈がズレる）。
       commit(
         mapActiveNotebook((n) => {
           const idx = n.pages.findIndex((p) => p.id === id);
@@ -392,6 +395,7 @@ export const useNotebooks = create<NotebooksState>()((set, get) => {
               : n.activePageId;
           return { ...n, pages, activePageId };
         }),
+        { undoable: false },
       );
       return true;
     },
@@ -557,7 +561,7 @@ export const useNotebooks = create<NotebooksState>()((set, get) => {
       commit(
         mapActivePage((pg) => ({
           ...pg,
-          shapes: [...pg.shapes, { id: newId(), text: "", x, y, w: 150, rot: 0 }],
+          shapes: [...pg.shapes, { id: newId(), text: "", x, y, w: SHAPE_DEFAULT_WIDTH, rot: 0 }],
         })),
       ),
 

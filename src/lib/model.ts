@@ -16,7 +16,17 @@ import type {
   Sticker,
   StickerType,
 } from "./types";
-import { FRAMES, RULE_STYLES, STICKER_DEFAULT_SIZE, STICKER_MAX_SIZE, STICKER_MIN_SIZE, STICKER_TYPES } from "./types";
+import {
+  FRAMES,
+  RULE_STYLES,
+  SHAPE_DEFAULT_WIDTH,
+  SHAPE_MAX_WIDTH,
+  SHAPE_MIN_WIDTH,
+  STICKER_DEFAULT_SIZE,
+  STICKER_MAX_SIZE,
+  STICKER_MIN_SIZE,
+  STICKER_TYPES,
+} from "./types";
 
 /* ---------------- ID採番（Web版 newId 相当） ---------------- */
 
@@ -179,7 +189,9 @@ function normalizeShape(raw: unknown): Shape {
     text: str(r.text),
     x: num(r.x),
     y: num(r.y),
-    w: num(r.w, 150),
+    // 0/負値/極端に大きい幅は、boundsWidth 計測前の初回描画で Transformable がこの値を
+    // そのまま使い、不正な寸法や巨大カードになりうる。transform操作と同じ範囲へ丸める。
+    w: clampNum(r.w, SHAPE_DEFAULT_WIDTH, SHAPE_MIN_WIDTH, SHAPE_MAX_WIDTH),
     rot: num(r.rot),
   };
 }
@@ -261,7 +273,7 @@ export function normalizeNotebook(raw: unknown): Notebook | null {
   if (type === "notestyle") {
     for (const p of pages) {
       if (p.note.trim()) {
-        p.shapes.push({ id: newId(), text: p.note, x: 20, y: 20, w: 150, rot: 0 });
+        p.shapes.push({ id: newId(), text: p.note, x: 20, y: 20, w: SHAPE_DEFAULT_WIDTH, rot: 0 });
         p.note = "";
       }
     }
@@ -277,22 +289,44 @@ export function normalizeNotebook(raw: unknown): Notebook | null {
   };
 }
 
+/** 集合に無ければ登録、有れば重複なので新IDを振り直す（先勝ち）。 */
+function uniqueId(seen: Set<string>, obj: { id: string }): void {
+  if (seen.has(obj.id)) obj.id = newId();
+  seen.add(obj.id);
+}
+
 /**
- * 手帳ID(全体で一意)とページID(手帳内で一意)の重複を振り直す。先に出た方を優先し、
- * 後続の重複へ新IDを与える。壊れ/細工バックアップが同一IDを含むと、React のキーが衝突し、
- * さらに ID一致で動く操作が同IDの要素すべてに及ぶ（例: deletePage は同IDのページを全消し、
- * renameNotebook は同IDの手帳を全改名）。先勝ちなので activeNotebookId / activePageId が
- * 指す先（＝最初の出現）は保たれる。
+ * 重複IDを振り直す。先に出た方を優先し、後続の重複へ新IDを与える。壊れ/細工バックアップが
+ * 同一IDを含むと、React のキーが衝突し、さらに ID一致で動く操作が同IDの要素すべてに及ぶ
+ * （例: deletePage は同IDのページを全消し、updateShape は同IDのカードを全更新）。
+ * ・手帳IDは全体で、ページIDは手帳内で、ページ内要素IDはページ内かつ種類ごとに一意化する。
+ * ・要素は種類ごとに別集合で判定する。矢印が参照する shape ID は先勝ちで最初の出現が保持する
+ *   ため、矢印の端点(from/to)は常に実在する shape へ解決でき、張り替えは不要。
+ * ・先勝ちなので activeNotebookId / activePageId が指す先（最初の出現）も保たれる。
  */
 function dedupeIds(notebooks: Notebook[]): void {
   const seenNb = new Set<string>();
   for (const nb of notebooks) {
-    if (seenNb.has(nb.id)) nb.id = newId();
-    seenNb.add(nb.id);
+    uniqueId(seenNb, nb);
     const seenPg = new Set<string>();
     for (const pg of nb.pages) {
-      if (seenPg.has(pg.id)) pg.id = newId();
-      seenPg.add(pg.id);
+      uniqueId(seenPg, pg);
+      const stepIds = new Set<string>();
+      const stickerIds = new Set<string>();
+      const shapeIds = new Set<string>();
+      const photoIds = new Set<string>();
+      const arrowIds = new Set<string>();
+      for (const st of pg.steps) {
+        uniqueId(stepIds, st);
+        if (st.type === "if") {
+          for (const b of st.branches.yes) uniqueId(stepIds, b);
+          for (const b of st.branches.no) uniqueId(stepIds, b);
+        }
+      }
+      for (const s of pg.stickers) uniqueId(stickerIds, s);
+      for (const s of pg.shapes) uniqueId(shapeIds, s);
+      for (const p of pg.photos) uniqueId(photoIds, p);
+      for (const a of pg.arrows) uniqueId(arrowIds, a);
     }
   }
 }

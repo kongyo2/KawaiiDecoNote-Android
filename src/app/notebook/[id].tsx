@@ -179,8 +179,16 @@ export default function NotebookEditor() {
     ]);
   };
   const onDeletePage = (pageId: string) => {
-    const ok = deletePage(pageId);
-    if (!ok) showToast("最後のページは消せません🌸");
+    // 最後の1枚は消せない（確認ダイアログを出す前に弾く）
+    if (notebook.pages.length <= 1) {
+      showToast("最後のページは消せません🌸");
+      return;
+    }
+    // ページ削除は構造変更で undo 対象外（元に戻せない）。中身ごと消えるので確認する。
+    Alert.alert("ページを削除", "このページを削除します。中身も全部消えます。よろしいですか？", [
+      { text: "やめる", style: "cancel" },
+      { text: "削除", style: "destructive", onPress: () => deletePage(pageId) },
+    ]);
   };
 
   return (

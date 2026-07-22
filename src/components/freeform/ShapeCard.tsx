@@ -2,6 +2,7 @@ import { StyleSheet, TextInput, View } from "react-native";
 import type { LayoutChangeEvent } from "react-native";
 import { colors, fonts } from "@/lib/theme";
 import { useNotebooks } from "@/state/notebooks";
+import { SHAPE_MAX_WIDTH, SHAPE_MIN_WIDTH } from "@/lib/types";
 import type { Shape } from "@/lib/types";
 import { Transformable } from "@/components/transform/Transformable";
 import type { TransformPatch } from "@/components/transform/Transformable";
@@ -40,8 +41,8 @@ export function ShapeCard({
       y={shape.y}
       w={shape.w}
       rot={shape.rot}
-      minW={80}
-      maxW={420}
+      minW={SHAPE_MIN_WIDTH}
+      maxW={SHAPE_MAX_WIDTH}
       selected={connectMode ? false : selected}
       bodyDraggable={false}
       showDragHandle={!connectMode}

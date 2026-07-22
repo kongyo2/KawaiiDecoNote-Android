@@ -13,6 +13,7 @@ import {
 import { PHOTO_DEFAULT_WIDTH, SHAPE_DEFAULT_WIDTH, STICKER_DEFAULT_SIZE } from "@/lib/types";
 import type {
   AppState,
+  BranchKey,
   Frame,
   Notebook,
   NotebookType,
@@ -22,8 +23,6 @@ import type {
   Sticker,
   StickerType,
 } from "@/lib/types";
-
-type BranchKey = "yes" | "no";
 
 interface NotebooksState {
   ready: boolean;

@@ -29,6 +29,8 @@ export interface IfStep {
 
 export type Step = NormalStep | IfStep;
 
+export type BranchKey = "yes" | "no";
+
 export interface Sticker {
   id: string;
   type: StickerType;

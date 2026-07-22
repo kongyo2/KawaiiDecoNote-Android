@@ -1,6 +1,7 @@
 import type {
   AppState,
   Arrow,
+  BranchKey,
   Frame,
   IfStep,
   NormalStep,
@@ -102,8 +103,6 @@ export function newIfStep(): IfStep {
     branches: { yes: [], no: [] },
   };
 }
-
-export type BranchKey = "yes" | "no";
 
 // --- 工程ツリー（ネスト対応）を不変更新するための再帰ヘルパー ---
 

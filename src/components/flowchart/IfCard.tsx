@@ -1,9 +1,7 @@
 import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { colors, fonts, radii } from "@/lib/theme";
 import { useNotebooks } from "@/state/notebooks";
-import type { IfStep, NormalStep } from "@/lib/types";
-
-type BranchKey = "yes" | "no";
+import type { BranchKey, IfStep, NormalStep } from "@/lib/types";
 
 // 最上位（cb.steps 直下）の if 分岐カード。上下移動・削除ボタン付き。
 export function IfCard({ step, index, count }: { step: IfStep; index: number; count: number }) {

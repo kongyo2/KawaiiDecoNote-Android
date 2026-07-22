@@ -325,11 +325,14 @@ function uniqueId(seen: Set<string>, obj: { id: string }): void {
  *   一意化する（同IDだと複数が同時に選択状態になりハンドルやジェスチャが競合する）。shape を
  *   最初に登録するので、shape のIDは先行 shape 以外では振り直されず、矢印の端点（先勝ちで最初の
  *   shape に解決）は保たれる＝端点の張り替えは不要。
+ * ・写真IDはさらに文書全体で一意化する。undo の blob キャッシュ(photoBlobs)が写真IDをキーに
+ *   文書横断で持つため、別ページに同IDの写真があると blob が上書きされ undo で別画像に化ける。
  * ・工程/if分岐は selectedId と無関係なので別空間で一意化する。
  * ・先勝ちなので activeNotebookId / activePageId が指す先（最初の出現）も保たれる。
  */
 function dedupeIds(notebooks: Notebook[]): void {
   const seenNb = new Set<string>();
+  const seenPhoto = new Set<string>(); // 写真IDは文書全体で一意化（photoBlobs が文書横断でキーに使う）
   for (const nb of notebooks) {
     uniqueId(seenNb, nb);
     const seenPg = new Set<string>();
@@ -346,7 +349,12 @@ function dedupeIds(notebooks: Notebook[]): void {
       // selectedId を共有する盤面要素は1つの名前空間で一意化（shape を先に登録）。
       const drawableIds = new Set<string>();
       for (const s of pg.shapes) uniqueId(drawableIds, s);
-      for (const p of pg.photos) uniqueId(drawableIds, p);
+      // 写真はページ内(他ドローアブル)と文書全体(他ページの写真)の両方で衝突しないようにする。
+      for (const p of pg.photos) {
+        if (drawableIds.has(p.id) || seenPhoto.has(p.id)) p.id = newId();
+        drawableIds.add(p.id);
+        seenPhoto.add(p.id);
+      }
       for (const s of pg.stickers) uniqueId(drawableIds, s);
       for (const a of pg.arrows) uniqueId(drawableIds, a);
     }

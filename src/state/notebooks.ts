@@ -279,6 +279,12 @@ export const useNotebooks = create<NotebooksState>()((set, get) => {
     },
 
     recheckStorage: () => {
+      // 未保存の編集があるなら、診断の前に本当の保存を試す。診断用の小さなファイルが書けても、
+      // 本体(手帳)が未保存(dirty)のまま警告を消すと、次のフラッシュ前に落ちたとき最新の編集が
+      // 失われる。flushSave は成功で dirty を下ろし、失敗なら storageOk:false と保存エラーを残す。
+      if (dirty) flushSave();
+      // まだ保存に失敗している(dirty)なら健全化しない（flushSave が入れた警告をそのまま残す）
+      if (dirty) return;
       const diag = diagnoseStorage();
       // storage が健全でも、壊れデータのロード警告は復元するまで消さない
       set({

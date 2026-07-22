@@ -1,0 +1,132 @@
+name: Android APK Release
+
+# 手動トリガーでAPKをビルドし、GitHub Releasesに公開する。
+#
+# 署名について:
+#   リポジトリのSecretsに以下を登録すると、そのキーストアで署名される（推奨）。
+#     ANDROID_KEYSTORE_BASE64   … keystoreファイルをbase64にしたもの
+#     ANDROID_KEYSTORE_PASSWORD … ストアのパスワード
+#     ANDROID_KEY_ALIAS         … キーのエイリアス
+#     ANDROID_KEY_PASSWORD      … キーのパスワード
+#   未登録の場合はReact Native標準のdebugキーで署名される。インストールも
+#   バージョンアップも問題なく動くけれど、公開鍵が広く知られたキーなので、
+#   継続配布するならSecretsの登録がおすすめ。
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "バージョン名（例: 0.2.0）。空ならpackage.jsonの値を使う"
+        required: false
+        default: ""
+      release_notes:
+        description: "リリースノートに載せる一言（任意）"
+        required: false
+        default: ""
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    runs-on: ubuntu-latest
+    env:
+      HAS_RELEASE_KEYSTORE: ${{ secrets.ANDROID_KEYSTORE_BASE64 != '' && '1' || '' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: バージョンを決める
+        id: ver
+        env:
+          INPUT_VERSION: ${{ inputs.version }}
+        run: |
+          VERSION="$INPUT_VERSION"
+          if [ -z "$VERSION" ]; then
+            VERSION="$(node -p "require('./package.json').version")"
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "tag=v$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: app.jsonへバージョンとversionCodeを書き込む
+        run: |
+          node -e '
+            const fs = require("fs");
+            const appJson = JSON.parse(fs.readFileSync("app.json", "utf8"));
+            appJson.expo.version = process.env.APP_VERSION;
+            appJson.expo.android.versionCode = Number(process.env.RUN_NUMBER);
+            fs.writeFileSync("app.json", JSON.stringify(appJson, null, 2) + "\n");
+          '
+        env:
+          APP_VERSION: ${{ steps.ver.outputs.version }}
+          RUN_NUMBER: ${{ github.run_number }}
+
+      - name: expo prebuild（androidプロジェクト生成）
+        run: npx expo prebuild --platform android --no-install
+
+      - name: リリース署名を設定（Secretsがある場合のみ）
+        if: env.HAS_RELEASE_KEYSTORE == '1'
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          printf '%s' "$KEYSTORE_BASE64" | base64 -d > android/app/release.keystore
+          node scripts/configure-android-signing.mjs
+
+      - name: APKをビルド
+        working-directory: android
+        run: |
+          chmod +x ./gradlew
+          ./gradlew :app:assembleRelease --no-daemon
+        env:
+          KAWAII_UPLOAD_STORE_FILE: release.keystore
+          KAWAII_UPLOAD_STORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KAWAII_UPLOAD_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KAWAII_UPLOAD_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+
+      - name: 成果物をリネーム
+        run: cp android/app/build/outputs/apk/release/app-release.apk "KawaiiDecoNote-${{ steps.ver.outputs.version }}.apk"
+
+      - name: リリースノートを組み立てる
+        id: notes
+        env:
+          RELEASE_NOTES: ${{ inputs.release_notes }}
+        run: |
+          {
+            echo "body<<NOTES_EOF"
+            if [ -n "$RELEASE_NOTES" ]; then
+              echo "$RELEASE_NOTES"
+              echo ""
+            fi
+            echo "## インストール"
+            echo ""
+            echo "1. 下の **KawaiiDecoNote-${{ steps.ver.outputs.version }}.apk** をAndroid端末でダウンロード"
+            echo "2. ダウンロードしたAPKを開いてインストール（「提供元不明のアプリ」の許可が必要な場合があります）"
+            echo ""
+            if [ "$HAS_RELEASE_KEYSTORE" != "1" ]; then
+              echo "> ⚠️ このAPKは開発用（debug）キーで署名されています。動作に支障はありませんが、継続配布するならリポジトリにリリース署名のSecretsを設定してください。"
+            fi
+            echo "NOTES_EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: GitHub Releaseを作成してAPKを添付
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.ver.outputs.tag }}
+          name: かわいくデコれる手帳 ${{ steps.ver.outputs.tag }}
+          body: ${{ steps.notes.outputs.body }}
+          generate_release_notes: true
+          files: KawaiiDecoNote-${{ steps.ver.outputs.version }}.apk

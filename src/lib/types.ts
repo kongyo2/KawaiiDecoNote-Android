@@ -155,3 +155,8 @@ export const STICKER_DEFAULT_SIZE = 44;
 export const SHAPE_MIN_WIDTH = 80;
 export const SHAPE_MAX_WIDTH = 420;
 export const SHAPE_DEFAULT_WIDTH = 150;
+
+/** 写真の幅(px)。transform操作(PhotoCard)の下限/上限と、取り込み正規化のクランプで共有する。 */
+export const PHOTO_MIN_WIDTH = 60;
+export const PHOTO_MAX_WIDTH = 420;
+export const PHOTO_DEFAULT_WIDTH = 140;

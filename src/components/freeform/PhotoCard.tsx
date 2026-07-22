@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Image, StyleSheet } from "react-native";
 import type { LayoutChangeEvent } from "react-native";
 import { useNotebooks } from "@/state/notebooks";
+import { PHOTO_MAX_WIDTH, PHOTO_MIN_WIDTH } from "@/lib/types";
 import type { Photo } from "@/lib/types";
 import { Transformable } from "@/components/transform/Transformable";
 import type { TransformPatch } from "@/components/transform/Transformable";
@@ -47,8 +48,8 @@ export function PhotoCard({
       y={photo.y}
       w={photo.w}
       rot={photo.rot}
-      minW={60}
-      maxW={420}
+      minW={PHOTO_MIN_WIDTH}
+      maxW={PHOTO_MAX_WIDTH}
       selected={selected}
       bodyDraggable
       handleTint={CHIC_HANDLE}

@@ -1,7 +1,7 @@
 import { create } from "zustand";
 import { diagnoseStorage, emptyState, loadState, saveState } from "@/lib/store";
 import { newBranchStep, newId, newIfStep, newNotebook, newPage, newStep } from "@/lib/model";
-import { SHAPE_DEFAULT_WIDTH, STICKER_DEFAULT_SIZE } from "@/lib/types";
+import { PHOTO_DEFAULT_WIDTH, SHAPE_DEFAULT_WIDTH, STICKER_DEFAULT_SIZE } from "@/lib/types";
 import type {
   AppState,
   Frame,
@@ -589,7 +589,7 @@ export const useNotebooks = create<NotebooksState>()((set, get) => {
       commit(
         mapActivePage((pg) => ({
           ...pg,
-          photos: [...pg.photos, { id: newId(), x, y, w: 140, rot: 0, dataUrl }],
+          photos: [...pg.photos, { id: newId(), x, y, w: PHOTO_DEFAULT_WIDTH, rot: 0, dataUrl }],
         })),
       ),
 
@@ -605,7 +605,7 @@ export const useNotebooks = create<NotebooksState>()((set, get) => {
                 pages: nb.pages.map((pg) =>
                   pg.id !== pageId
                     ? pg
-                    : { ...pg, photos: [...pg.photos, { id: newId(), x, y, w: 140, rot: 0, dataUrl }] },
+                    : { ...pg, photos: [...pg.photos, { id: newId(), x, y, w: PHOTO_DEFAULT_WIDTH, rot: 0, dataUrl }] },
                 ),
               },
         ),

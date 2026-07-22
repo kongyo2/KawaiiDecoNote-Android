@@ -28,7 +28,9 @@ export default function CoverScreen() {
   const [creating, setCreating] = useState(false);
   const [renameId, setRenameId] = useState<string | null>(null);
 
-  const open = (id: string) => router.push(`/notebook/${id}`);
+  // href をオブジェクトで渡し、id を [id] パラメータとして安全にエンコードさせる。
+  // 取り込んだ手帳IDに / ? # 等が含まれても、文字列補間のように経路が壊れないようにする。
+  const open = (id: string) => router.push({ pathname: "/notebook/[id]", params: { id } });
 
   const onCreate = (type: NotebookType, name: string, color: string) => {
     const id = createNotebook(type, name, color);

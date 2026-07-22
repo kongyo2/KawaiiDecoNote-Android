@@ -18,6 +18,9 @@ import type {
 } from "./types";
 import {
   FRAMES,
+  PHOTO_DEFAULT_WIDTH,
+  PHOTO_MAX_WIDTH,
+  PHOTO_MIN_WIDTH,
   RULE_STYLES,
   SHAPE_DEFAULT_WIDTH,
   SHAPE_MAX_WIDTH,
@@ -207,31 +210,46 @@ function normalizePhoto(raw: unknown): Photo | null {
     id: str(r.id) || newId(),
     x: num(r.x),
     y: num(r.y),
-    w: num(r.w, 140),
+    // 0/負値/極端に大きい幅は、初回描画で Transformable がこの値をそのまま使い、
+    // FreeformCanvas も高さ初期値の代わりに使うため巨大な盤面になりうる。範囲へ丸める。
+    w: clampNum(r.w, PHOTO_DEFAULT_WIDTH, PHOTO_MIN_WIDTH, PHOTO_MAX_WIDTH),
     rot: num(r.rot),
     dataUrl,
   };
 }
+
+// 手動配置(mx/my/length/angle)の許容上限。このRN移植には矢印の手動ドラッグが無く、
+// manual幾何は Web版バックアップ由来のみ。端点(from/to)から自動計算できるので、常識外の
+// 値は捨てて自動に戻す（巨大な length を width にした Pressable 描画を防ぐ）。盤面より十分
+// 大きい値にしてあり、まっとうなバックアップの手動配置は保持する。
+const MANUAL_ARROW_MAX = 20000;
 
 function normalizeArrow(raw: unknown): Arrow | null {
   const r = rec(raw);
   const from = str(r.from);
   const to = str(r.to);
   if (!from || !to) return null;
-  return {
-    id: str(r.id) || newId(),
-    from,
-    to,
-    manual: bool(r.manual),
-    mx: num(r.mx),
-    my: num(r.my),
-    length: num(r.length),
-    angle: num(r.angle),
-  };
+  const id = str(r.id) || newId();
+  const mx = num(r.mx);
+  const my = num(r.my);
+  const length = num(r.length);
+  const angle = num(r.angle);
+  const manualOk =
+    bool(r.manual) &&
+    length > 0 &&
+    length <= MANUAL_ARROW_MAX &&
+    Math.abs(mx) <= MANUAL_ARROW_MAX &&
+    Math.abs(my) <= MANUAL_ARROW_MAX;
+  // 手動値が常識外なら from/to からの自動計算に戻す（addArrow 直後と同じゼロ幾何）。
+  return manualOk
+    ? { id, from, to, manual: true, mx, my, length, angle }
+    : { id, from, to, manual: false, mx: 0, my: 0, length: 0, angle: 0 };
 }
 
 export function normalizePage(raw: unknown): Page {
   const r = rec(raw);
+  const shapes = list(r.shapes).map(normalizeShape);
+  const shapeIds = new Set(shapes.map((s) => s.id));
   return {
     id: str(r.id) || newId(),
     type: oneOf<PageType>(r.type, ["flowchart", "notebook"], "flowchart"),
@@ -241,13 +259,16 @@ export function normalizePage(raw: unknown): Page {
     steps: list(r.steps).map(normalizeStep),
     stickers: list(r.stickers).map(normalizeSticker),
     note: str(r.note),
-    shapes: list(r.shapes).map(normalizeShape),
+    shapes,
     photos: list(r.photos)
       .map(normalizePhoto)
       .filter((p): p is Photo => p !== null),
+    // 端点が実在するテキストを指す矢印だけ残す。消えた/存在しない shape を指す孤立矢印は、
+    // manual幾何で見えない or 誤った線として描かれ得るので落とす（deleteShape の不変条件に合わせる）。
     arrows: list(r.arrows)
       .map(normalizeArrow)
-      .filter((a): a is Arrow => a !== null),
+      .filter((a): a is Arrow => a !== null)
+      .filter((a) => shapeIds.has(a.from) && shapeIds.has(a.to)),
     ruleStyle: oneOf<RuleStyle>(r.ruleStyle, RULE_STYLES, "lines"),
     paperColor: hexColor(r.paperColor, "#FBF7F2"),
   };
@@ -299,9 +320,12 @@ function uniqueId(seen: Set<string>, obj: { id: string }): void {
  * 重複IDを振り直す。先に出た方を優先し、後続の重複へ新IDを与える。壊れ/細工バックアップが
  * 同一IDを含むと、React のキーが衝突し、さらに ID一致で動く操作が同IDの要素すべてに及ぶ
  * （例: deletePage は同IDのページを全消し、updateShape は同IDのカードを全更新）。
- * ・手帳IDは全体で、ページIDは手帳内で、ページ内要素IDはページ内かつ種類ごとに一意化する。
- * ・要素は種類ごとに別集合で判定する。矢印が参照する shape ID は先勝ちで最初の出現が保持する
- *   ため、矢印の端点(from/to)は常に実在する shape へ解決でき、張り替えは不要。
+ * ・手帳IDは全体で、ページIDは手帳内で一意化する。
+ * ・盤面のテキスト/写真/シール/矢印は editor が1つの selectedId を共有するため、種類をまたいで
+ *   一意化する（同IDだと複数が同時に選択状態になりハンドルやジェスチャが競合する）。shape を
+ *   最初に登録するので、shape のIDは先行 shape 以外では振り直されず、矢印の端点（先勝ちで最初の
+ *   shape に解決）は保たれる＝端点の張り替えは不要。
+ * ・工程/if分岐は selectedId と無関係なので別空間で一意化する。
  * ・先勝ちなので activeNotebookId / activePageId が指す先（最初の出現）も保たれる。
  */
 function dedupeIds(notebooks: Notebook[]): void {
@@ -312,10 +336,6 @@ function dedupeIds(notebooks: Notebook[]): void {
     for (const pg of nb.pages) {
       uniqueId(seenPg, pg);
       const stepIds = new Set<string>();
-      const stickerIds = new Set<string>();
-      const shapeIds = new Set<string>();
-      const photoIds = new Set<string>();
-      const arrowIds = new Set<string>();
       for (const st of pg.steps) {
         uniqueId(stepIds, st);
         if (st.type === "if") {
@@ -323,10 +343,12 @@ function dedupeIds(notebooks: Notebook[]): void {
           for (const b of st.branches.no) uniqueId(stepIds, b);
         }
       }
-      for (const s of pg.stickers) uniqueId(stickerIds, s);
-      for (const s of pg.shapes) uniqueId(shapeIds, s);
-      for (const p of pg.photos) uniqueId(photoIds, p);
-      for (const a of pg.arrows) uniqueId(arrowIds, a);
+      // selectedId を共有する盤面要素は1つの名前空間で一意化（shape を先に登録）。
+      const drawableIds = new Set<string>();
+      for (const s of pg.shapes) uniqueId(drawableIds, s);
+      for (const p of pg.photos) uniqueId(drawableIds, p);
+      for (const s of pg.stickers) uniqueId(drawableIds, s);
+      for (const a of pg.arrows) uniqueId(drawableIds, a);
     }
   }
 }

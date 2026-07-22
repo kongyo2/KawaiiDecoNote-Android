@@ -1,7 +1,6 @@
 import type {
   AppState,
   Arrow,
-  BranchStep,
   Frame,
   IfStep,
   NormalStep,
@@ -45,17 +44,18 @@ export function seedUid(state: AppState): void {
     const n = digits ? parseInt(digits, 10) : 0;
     if (Number.isFinite(n)) max = Math.max(max, n);
   };
+  const scanStep = (st: Step): void => {
+    scan(st.id);
+    if (st.type === "if") {
+      for (const b of st.branches.yes) scanStep(b);
+      for (const b of st.branches.no) scanStep(b);
+    }
+  };
   for (const nb of state.notebooks) {
     scan(nb.id);
     for (const pg of nb.pages) {
       scan(pg.id);
-      for (const st of pg.steps) {
-        scan(st.id);
-        if (st.type === "if") {
-          for (const b of st.branches.yes) scan(b.id);
-          for (const b of st.branches.no) scan(b.id);
-        }
-      }
+      for (const st of pg.steps) scanStep(st);
       for (const s of pg.stickers) scan(s.id);
       for (const s of pg.shapes) scan(s.id);
       for (const p of pg.photos) scan(p.id);
@@ -103,8 +103,64 @@ export function newIfStep(): IfStep {
   };
 }
 
-export function newBranchStep(): BranchStep {
-  return { id: newId(), text: "", done: false };
+export type BranchKey = "yes" | "no";
+
+// --- 工程ツリー（ネスト対応）を不変更新するための再帰ヘルパー ---
+
+// id が一致する工程を木のどこにあっても探して update を適用し、新しい配列を返す。
+export function updateStepInTree(steps: Step[], id: string, update: (s: Step) => Step): Step[] {
+  return steps.map((s) => {
+    if (s.id === id) return update(s);
+    if (s.type === "if") {
+      return {
+        ...s,
+        branches: {
+          yes: updateStepInTree(s.branches.yes, id, update),
+          no: updateStepInTree(s.branches.no, id, update),
+        },
+      };
+    }
+    return s;
+  });
+}
+
+// id が一致する工程を木のどこにあっても取り除いて、新しい配列を返す。
+export function removeStepFromTree(steps: Step[], id: string): Step[] {
+  const result: Step[] = [];
+  for (const s of steps) {
+    if (s.id === id) continue;
+    if (s.type === "if") {
+      result.push({
+        ...s,
+        branches: {
+          yes: removeStepFromTree(s.branches.yes, id),
+          no: removeStepFromTree(s.branches.no, id),
+        },
+      });
+    } else {
+      result.push(s);
+    }
+  }
+  return result;
+}
+
+// id が一致する工程を木のどこにあっても探して返す（見つからなければ undefined）。
+export function findStepInTree(steps: Step[], id: string): Step | undefined {
+  for (const s of steps) {
+    if (s.id === id) return s;
+    if (s.type === "if") {
+      const found = findStepInTree(s.branches.yes, id) ?? findStepInTree(s.branches.no, id);
+      if (found) return found;
+    }
+  }
+  return undefined;
+}
+
+// ifId の if 分岐（key 側）の末尾に child を追加した新しい配列を返す。
+export function appendToBranch(steps: Step[], ifId: string, key: BranchKey, child: Step): Step[] {
+  return updateStepInTree(steps, ifId, (s) =>
+    s.type === "if" ? { ...s, branches: { ...s.branches, [key]: [...s.branches[key], child] } } : s,
+  );
 }
 
 function rec(v: unknown): Record<string, unknown> {
@@ -138,11 +194,6 @@ function hexColor(v: unknown, fallback: string): string {
   return typeof v === "string" && HEX_COLOR.test(v) ? v : fallback;
 }
 
-function normalizeBranchStep(raw: unknown): BranchStep {
-  const r = rec(raw);
-  return { id: str(r.id) || newId(), text: str(r.text), done: bool(r.done) };
-}
-
 function normalizeStep(raw: unknown): Step {
   const r = rec(raw);
   if (r.type === "if") {
@@ -154,9 +205,11 @@ function normalizeStep(raw: unknown): Step {
       text: str(r.text),
       done: bool(r.done),
       labels: { yes: str(labels.yes, "はい"), no: str(labels.no, "いいえ") },
+      // 分岐の中身も工程として再帰的に正規化する。
+      // 旧データ（type なしの分岐工程 {id,text,done}）は type:"step" の工程に変換される。
       branches: {
-        yes: list(branches.yes).map(normalizeBranchStep),
-        no: list(branches.no).map(normalizeBranchStep),
+        yes: list(branches.yes).map(normalizeStep),
+        no: list(branches.no).map(normalizeStep),
       },
     };
   }
@@ -254,11 +307,10 @@ export function normalizeNotebook(raw: unknown): Notebook | null {
   if (!isPlainObject(raw)) return null;
   const r = raw;
   const pages = list(r.pages).filter(isPlainObject).map(normalizePage);
-  if (pages.length === 0) return null;
-  const rawType = r.type === "rollbahn" ? "notestyle" : r.type;
-  const type = oneOf<NotebookType>(rawType, ["profile", "notestyle"], "profile");
   const firstPage = pages[0];
   if (!firstPage) return null;
+  const rawType = r.type === "rollbahn" ? "notestyle" : r.type;
+  const type = oneOf<NotebookType>(rawType, ["profile", "notestyle"], "profile");
   let activePageId = str(r.activePageId);
   if (!pages.some((p) => p.id === activePageId)) activePageId = firstPage.id;
 
@@ -286,6 +338,14 @@ function uniqueId(seen: Set<string>, obj: { id: string }): void {
   seen.add(obj.id);
 }
 
+function dedupeStep(st: Step, seen: Set<string>): void {
+  uniqueId(seen, st);
+  if (st.type === "if") {
+    for (const b of st.branches.yes) dedupeStep(b, seen);
+    for (const b of st.branches.no) dedupeStep(b, seen);
+  }
+}
+
 function dedupeIds(notebooks: Notebook[]): void {
   const seenNb = new Set<string>();
   const seenPhoto = new Set<string>();
@@ -295,13 +355,7 @@ function dedupeIds(notebooks: Notebook[]): void {
     for (const pg of nb.pages) {
       uniqueId(seenPg, pg);
       const stepIds = new Set<string>();
-      for (const st of pg.steps) {
-        uniqueId(stepIds, st);
-        if (st.type === "if") {
-          for (const b of st.branches.yes) uniqueId(stepIds, b);
-          for (const b of st.branches.no) uniqueId(stepIds, b);
-        }
-      }
+      for (const st of pg.steps) dedupeStep(st, stepIds);
       const drawableIds = new Set<string>();
       for (const s of pg.shapes) uniqueId(drawableIds, s);
       for (const p of pg.photos) {

@@ -1,6 +1,15 @@
 import { create } from "zustand";
 import { diagnoseStorage, emptyState, loadState, saveState } from "@/lib/store";
-import { newBranchStep, newId, newIfStep, newNotebook, newPage, newStep } from "@/lib/model";
+import {
+  appendToBranch,
+  newId,
+  newIfStep,
+  newNotebook,
+  newPage,
+  newStep,
+  removeStepFromTree,
+  updateStepInTree,
+} from "@/lib/model";
 import { PHOTO_DEFAULT_WIDTH, SHAPE_DEFAULT_WIDTH, STICKER_DEFAULT_SIZE } from "@/lib/types";
 import type {
   AppState,
@@ -55,9 +64,7 @@ interface NotebooksState {
 
   setBranchLabel: (stepId: string, key: BranchKey, label: string) => void;
   addBranchStep: (stepId: string, key: BranchKey) => void;
-  setBranchStepText: (stepId: string, key: BranchKey, branchId: string, text: string) => void;
-  toggleBranchStep: (stepId: string, key: BranchKey, branchId: string) => void;
-  deleteBranchStep: (stepId: string, key: BranchKey, branchId: string) => void;
+  addBranchIfStep: (stepId: string, key: BranchKey) => void;
 
   addSticker: (type: StickerType, x: number, y: number) => void;
   updateSticker: (id: string, patch: Partial<Pick<Sticker, "x" | "y" | "rot" | "size">>) => void;
@@ -362,7 +369,7 @@ export const useNotebooks = create<NotebooksState>()((set, get) => {
       commit(
         mapActivePage((pg) => ({
           ...pg,
-          steps: pg.steps.map((s) => (s.id === stepId ? { ...s, text } : s)),
+          steps: updateStepInTree(pg.steps, stepId, (s) => ({ ...s, text })),
         })),
         { immediate: false },
       ),
@@ -372,8 +379,8 @@ export const useNotebooks = create<NotebooksState>()((set, get) => {
       commit(
         mapActivePage((pg) => ({
           ...pg,
-          steps: pg.steps.map((s) => {
-            if (s.id !== stepId || s.type !== "step") return s;
+          steps: updateStepInTree(pg.steps, stepId, (s) => {
+            if (s.type !== "step") return s;
             nowDone = !s.done;
             return { ...s, done: nowDone };
           }),
@@ -397,76 +404,24 @@ export const useNotebooks = create<NotebooksState>()((set, get) => {
         }),
       ),
 
-    deleteStep: (stepId) => commit(mapActivePage((pg) => ({ ...pg, steps: pg.steps.filter((s) => s.id !== stepId) }))),
+    deleteStep: (stepId) => commit(mapActivePage((pg) => ({ ...pg, steps: removeStepFromTree(pg.steps, stepId) }))),
 
     setBranchLabel: (stepId, key, label) =>
       commit(
         mapActivePage((pg) => ({
           ...pg,
-          steps: pg.steps.map((s) =>
-            s.id === stepId && s.type === "if" ? { ...s, labels: { ...s.labels, [key]: label } } : s,
+          steps: updateStepInTree(pg.steps, stepId, (s) =>
+            s.type === "if" ? { ...s, labels: { ...s.labels, [key]: label } } : s,
           ),
         })),
         { immediate: false },
       ),
 
     addBranchStep: (stepId, key) =>
-      commit(
-        mapActivePage((pg) => ({
-          ...pg,
-          steps: pg.steps.map((s) =>
-            s.id === stepId && s.type === "if"
-              ? { ...s, branches: { ...s.branches, [key]: [...s.branches[key], newBranchStep()] } }
-              : s,
-          ),
-        })),
-      ),
+      commit(mapActivePage((pg) => ({ ...pg, steps: appendToBranch(pg.steps, stepId, key, newStep()) }))),
 
-    setBranchStepText: (stepId, key, branchId, text) =>
-      commit(
-        mapActivePage((pg) => ({
-          ...pg,
-          steps: pg.steps.map((s) => {
-            if (s.id !== stepId || s.type !== "if") return s;
-            return {
-              ...s,
-              branches: {
-                ...s.branches,
-                [key]: s.branches[key].map((b) => (b.id === branchId ? { ...b, text } : b)),
-              },
-            };
-          }),
-        })),
-        { immediate: false },
-      ),
-
-    toggleBranchStep: (stepId, key, branchId) =>
-      commit(
-        mapActivePage((pg) => ({
-          ...pg,
-          steps: pg.steps.map((s) => {
-            if (s.id !== stepId || s.type !== "if") return s;
-            return {
-              ...s,
-              branches: {
-                ...s.branches,
-                [key]: s.branches[key].map((b) => (b.id === branchId ? { ...b, done: !b.done } : b)),
-              },
-            };
-          }),
-        })),
-      ),
-
-    deleteBranchStep: (stepId, key, branchId) =>
-      commit(
-        mapActivePage((pg) => ({
-          ...pg,
-          steps: pg.steps.map((s) => {
-            if (s.id !== stepId || s.type !== "if") return s;
-            return { ...s, branches: { ...s.branches, [key]: s.branches[key].filter((b) => b.id !== branchId) } };
-          }),
-        })),
-      ),
+    addBranchIfStep: (stepId, key) =>
+      commit(mapActivePage((pg) => ({ ...pg, steps: appendToBranch(pg.steps, stepId, key, newIfStep()) }))),
 
     addSticker: (type, x, y) =>
       commit(

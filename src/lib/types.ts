@@ -10,12 +10,6 @@ export type RuleStyle = (typeof RULE_STYLES)[number];
 export type NotebookType = "profile" | "notestyle";
 export type PageType = "flowchart" | "notebook";
 
-export interface BranchStep {
-  id: string;
-  text: string;
-  done: boolean;
-}
-
 export interface NormalStep {
   id: string;
   type: "step";
@@ -29,7 +23,8 @@ export interface IfStep {
   text: string;
   done: boolean;
   labels: { yes: string; no: string };
-  branches: { yes: BranchStep[]; no: BranchStep[] };
+  // 分岐の中身は「工程カード」だけでなく、入れ子の if 分岐カードも置ける（再帰）。
+  branches: { yes: Step[]; no: Step[] };
 }
 
 export type Step = NormalStep | IfStep;

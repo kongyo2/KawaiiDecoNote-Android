@@ -2,14 +2,20 @@ export function pad2(n: number): string {
   return n.toString().padStart(2, "0");
 }
 
+// 年（数値）・月・日（各2桁ゼロ埋め文字列）を取り出す。日付スタンプ生成の共通部分。
+function dateParts(now: Date): { year: number; month: string; day: string } {
+  return { year: now.getFullYear(), month: pad2(now.getMonth() + 1), day: pad2(now.getDate()) };
+}
+
 export function todayStamp(): string {
-  const now = new Date();
-  return `${now.getFullYear()}-${pad2(now.getMonth() + 1)}-${pad2(now.getDate())}`;
+  const { year, month, day } = dateParts(new Date());
+  return `${year}-${month}-${day}`;
 }
 
 export function fileStamp(): string {
   const now = new Date();
-  return `${now.getFullYear()}${pad2(now.getMonth() + 1)}${pad2(now.getDate())}-${pad2(now.getHours())}${pad2(now.getMinutes())}`;
+  const { year, month, day } = dateParts(now);
+  return `${year}${month}${day}-${pad2(now.getHours())}${pad2(now.getMinutes())}`;
 }
 
 export function randomOf<T>(arr: readonly T[]): T | undefined {

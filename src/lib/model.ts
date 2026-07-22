@@ -194,13 +194,18 @@ function hexColor(v: unknown, fallback: string): string {
   return typeof v === "string" && HEX_COLOR.test(v) ? v : fallback;
 }
 
+// 既存の id を採用し、無ければ新規発番する（正規化対象すべてで共通の id 決定ロジック）。
+function idOf(r: Record<string, unknown>): string {
+  return str(r.id) || newId();
+}
+
 function normalizeStep(raw: unknown): Step {
   const r = rec(raw);
   if (r.type === "if") {
     const branches = rec(r.branches);
     const labels = rec(r.labels);
     return {
-      id: str(r.id) || newId(),
+      id: idOf(r),
       type: "if",
       text: str(r.text),
       done: bool(r.done),
@@ -213,13 +218,13 @@ function normalizeStep(raw: unknown): Step {
       },
     };
   }
-  return { id: str(r.id) || newId(), type: "step", text: str(r.text), done: bool(r.done) };
+  return { id: idOf(r), type: "step", text: str(r.text), done: bool(r.done) };
 }
 
 // ステッカー・シェイプ・写真に共通する配置情報（id と座標・回転）を正規化する。
 function normalizePlacement(r: Record<string, unknown>): Placement {
   return {
-    id: str(r.id) || newId(),
+    id: idOf(r),
     x: clampNum(r.x, 0, 0, MAX_POSITION),
     y: clampNum(r.y, 0, 0, MAX_POSITION),
     rot: num(r.rot),
@@ -262,7 +267,7 @@ function normalizeArrow(raw: unknown): Arrow | null {
   const from = str(r.from);
   const to = str(r.to);
   if (!from || !to) return null;
-  const id = str(r.id) || newId();
+  const id = idOf(r);
   const mx = num(r.mx);
   const my = num(r.my);
   const length = num(r.length);
@@ -283,7 +288,7 @@ export function normalizePage(raw: unknown): Page {
   const shapes = list(r.shapes).map(normalizeShape);
   const shapeIds = new Set(shapes.map((s) => s.id));
   return {
-    id: str(r.id) || newId(),
+    id: idOf(r),
     type: oneOf<PageType>(r.type, ["flowchart", "notebook"], "flowchart"),
     title: str(r.title),
     frame: oneOf<Frame>(r.frame, FRAMES, "aurora"),
@@ -325,7 +330,7 @@ export function normalizeNotebook(raw: unknown): Notebook | null {
   }
 
   return {
-    id: str(r.id) || newId(),
+    id: idOf(r),
     name: str(r.name),
     type,
     color: hexColor(r.color, "#C9B6E4"),

@@ -113,7 +113,9 @@ export function Transformable({
       runOnJS(onSelect)();
     });
 
-  const bodyGesture = showDragHandle ? tap : Gesture.Race(drag, tap);
+  // グリップでドラッグ（showDragHandle）or ドラッグ手段なし（接続モードのテキスト等）の
+  // ときは本体タップのみ。本体ドラッグはシール・写真（bodyDraggable）だけに限る。
+  const bodyGesture = showDragHandle || !bodyDraggable ? tap : Gesture.Race(drag, tap);
 
   const resize = Gesture.Pan()
     .onStart((e) => {

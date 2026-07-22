@@ -93,10 +93,14 @@ const MAX_UNDO = 15;
 export const useNotebooks = create<NotebooksState>()((set, get) => {
   let saveTimer: ReturnType<typeof setTimeout> | null = null;
   let dirty = false;
+  // 保留中（未保存）の変更バッチが undo 対象か。バッチに1つでもナビゲーション/構造変更が
+  // 混ざれば false。保存失敗時も保持して、定期リトライがこのフラグで保存するようにする
+  // （失敗した nav 保存を後からundo可能として再保存し、履歴のズレを蒸し返さないため）。
+  let pendingUndoable = true;
   let lastCommitted: string | null = null;
   let undoStack: string[] = [];
 
-  const flushSave = (undoable = true): void => {
+  const flushSave = (): void => {
     if (saveTimer) {
       clearTimeout(saveTimer);
       saveTimer = null;
@@ -112,12 +116,13 @@ export const useNotebooks = create<NotebooksState>()((set, get) => {
       if (!get().storageOk) set({ storageOk: true, storageError: "" });
       // ナビゲーションだけの変更（手帳の開閉・ページ切替・作成/削除）はundo対象にしない。
       // undoで表示中のルートと state がずれて「見つかりません」に落ちるのを防ぐ。
-      if (undoable && lastCommitted !== null && lastCommitted !== snapshot) {
+      if (pendingUndoable && lastCommitted !== null && lastCommitted !== snapshot) {
         undoStack.push(lastCommitted);
         if (undoStack.length > MAX_UNDO) undoStack.shift();
         set({ canUndo: true });
       }
       lastCommitted = snapshot;
+      pendingUndoable = true; // バッチ確定。次のバッチはundo可能から数え直す
     } catch (e) {
       const message = e instanceof Error ? `${e.name}: ${e.message}` : String(e);
       set({ storageOk: false, storageError: message });
@@ -127,7 +132,7 @@ export const useNotebooks = create<NotebooksState>()((set, get) => {
   const scheduleSave = (): void => {
     dirty = true;
     if (saveTimer) clearTimeout(saveTimer);
-    saveTimer = setTimeout(() => flushSave(true), 400);
+    saveTimer = setTimeout(flushSave, 400);
   };
 
   interface CommitOpts {
@@ -142,10 +147,12 @@ export const useNotebooks = create<NotebooksState>()((set, get) => {
     // 別の即時アクション（削除など）が来たら、先にその編集を確定させておく。
     // こうすると undo の復元先が「このアクションの直前（入力を含む）」になり、
     // 消す直前に打った文字が失われない。連続テキスト入力は immediate:false なので巻き込まない。
-    if (immediate && dirty) flushSave(true);
+    if (immediate && dirty) flushSave();
     set({ doc });
     dirty = true;
-    if (immediate) flushSave(undoable);
+    // バッチに nav 変更が混ざれば、このバッチ全体を undo 対象外にする
+    pendingUndoable = pendingUndoable && undoable;
+    if (immediate) flushSave();
     else scheduleSave();
     if (!undoable) {
       // ナビゲーション/構造変更（手帳の開閉・作成・削除、ページ切替）をまたぐと、
@@ -157,9 +164,10 @@ export const useNotebooks = create<NotebooksState>()((set, get) => {
     }
   };
 
-  /** 保留中の未保存編集を強制的に書き出す（アプリのバックグラウンド化・定期リトライ用） */
+  /** 保留中の未保存編集を強制的に書き出す（アプリのバックグラウンド化・定期リトライ用）。
+   * 保留バッチの undo 対象フラグ（pendingUndoable）を尊重して保存する。 */
   const flushPending = (): void => {
-    if (dirty) flushSave(true);
+    if (dirty) flushSave();
   };
 
   const mapActiveNotebook = (fn: (nb: Notebook) => Notebook): AppState => {
@@ -203,7 +211,8 @@ export const useNotebooks = create<NotebooksState>()((set, get) => {
       lastCommitted = JSON.stringify(restored);
       set({ doc: restored, canUndo: undoStack.length > 0 });
       dirty = true;
-      flushSave(false);
+      pendingUndoable = false;
+      flushSave();
     },
 
     importState: (state) => {
@@ -211,7 +220,8 @@ export const useNotebooks = create<NotebooksState>()((set, get) => {
       undoStack = [];
       set({ doc: state, canUndo: false });
       dirty = true;
-      flushSave(false);
+      pendingUndoable = false;
+      flushSave();
     },
 
     flushPending,

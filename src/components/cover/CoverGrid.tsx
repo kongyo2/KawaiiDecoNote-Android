@@ -8,6 +8,15 @@ import { COVER_ASPECT, CoverArt } from "./CoverArt";
 
 const ACTION_BAR_HEIGHT = 36;
 
+// 表紙が順に浮かび上がる演出。冊数が増えても待たされないよう、ずらす段数に
+// 上限を設ける（100冊あっても最後まで 0.36 秒で出そろう）。
+const STAGGER_MS = 45;
+const STAGGER_MAX_STEPS = 8;
+
+function enterDelay(index: number): number {
+  return Math.min(index, STAGGER_MAX_STEPS) * STAGGER_MS;
+}
+
 function CoverCard({
   notebook,
   index,
@@ -26,26 +35,31 @@ function CoverCard({
   const name = notebookDisplayName(notebook);
 
   return (
-    <Animated.View style={styles.cell} entering={FadeInDown.delay(index * 45).duration(260)}>
-      <Pressable
-        style={({ pressed }) => [styles.card, pressed && styles.cardPressed]}
-        onPress={onOpen}
-        accessibilityRole="button"
-        accessibilityLabel={`${name}を開く`}
-      >
-        <CoverArt
-          name={name}
-          type={notebook.type}
-          color={notebook.color}
-          pageCount={notebook.pages.length}
-          bottomInset={ACTION_BAR_HEIGHT}
-        />
+    <Animated.View style={styles.cell} entering={FadeInDown.delay(enterDelay(index)).duration(260)}>
+      {/* カードの外枠は押せない容れ物にして、「開く」と操作ボタンを兄弟に並べる。
+          押せる要素を入れ子にすると TalkBack が外側だけをひとかたまりで拾い、
+          名前の変更・コピー・削除に降りられなくなるため（BoardTabs と同じ扱い）。 */}
+      <View style={styles.card}>
+        <Pressable
+          style={({ pressed }) => [styles.opener, pressed && styles.cardPressed]}
+          onPress={onOpen}
+          accessibilityRole="button"
+          accessibilityLabel={`${name}を開く`}
+        >
+          <CoverArt
+            name={name}
+            type={notebook.type}
+            color={notebook.color}
+            pageCount={notebook.pages.length}
+            bottomInset={ACTION_BAR_HEIGHT}
+          />
+        </Pressable>
         <View style={styles.actions}>
           <IconButton icon="✏️" label={`${name}の名前を変える`} size={28} onPress={onRename} />
           <IconButton icon="📄" label={`${name}をコピー`} size={28} onPress={onDuplicate} />
           <IconButton icon="✕" label={`${name}を削除`} size={28} tone="rose" onPress={onDelete} />
         </View>
-      </Pressable>
+      </View>
     </Animated.View>
   );
 }
@@ -79,7 +93,7 @@ export function CoverGrid({
         />
       ))}
 
-      <Animated.View style={styles.cell} entering={FadeInDown.delay(notebooks.length * 45).duration(260)}>
+      <Animated.View style={styles.cell} entering={FadeInDown.delay(enterDelay(notebooks.length)).duration(260)}>
         <Pressable
           style={({ pressed }) => [styles.addCard, pressed && styles.cardPressed]}
           onPress={onAdd}
@@ -110,6 +124,10 @@ const styles = StyleSheet.create({
     borderRadius: radii.card,
     overflow: "hidden",
     boxShadow: shadows.raised,
+  },
+  // 表紙ぜんぶが「開く」の当たり判定。ボタン帯は上に重なるのでそちらが優先される。
+  opener: {
+    flex: 1,
   },
   cardPressed: {
     opacity: 0.9,

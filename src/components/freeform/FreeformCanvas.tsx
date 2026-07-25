@@ -5,7 +5,7 @@ import { useNotebooks } from "@/state/notebooks";
 import { useUi } from "@/state/ui";
 import type { Page } from "@/lib/types";
 import { StickerItem } from "@/components/board/StickerItem";
-import { ArrowLayer } from "./ArrowLayer";
+import { ARROW_HEIGHT, ArrowLayer } from "./ArrowLayer";
 import { PhotoCard } from "./PhotoCard";
 import { ShapeCard } from "./ShapeCard";
 
@@ -48,8 +48,13 @@ export function FreeformCanvas({ page }: { page: Page }) {
     for (const s of page.shapes) maxY = Math.max(maxY, s.y + (heights[s.id] ?? ASSUMED_SHAPE_HEIGHT));
     for (const p of page.photos) maxY = Math.max(maxY, p.y + (heights[p.id] ?? p.w));
     for (const s of page.stickers) maxY = Math.max(maxY, s.y + s.size);
+    // 手で動かした矢印は図形から位置が離れるので、別途いちばん下を見る。
+    // （回転を考えて、真下を向いた最悪ケースの長さで見積もる）
+    for (const a of page.arrows) {
+      if (a.manual) maxY = Math.max(maxY, a.my + a.length / 2 + ARROW_HEIGHT);
+    }
     return Math.max(CANVAS_MIN_HEIGHT, maxY + BOTTOM_ROOM);
-  }, [page.shapes, page.photos, page.stickers, heights]);
+  }, [page.shapes, page.photos, page.stickers, page.arrows, heights]);
 
   return (
     <View style={[styles.canvas, { minHeight }]} onLayout={(e) => setCanvasW(e.nativeEvent.layout.width)}>

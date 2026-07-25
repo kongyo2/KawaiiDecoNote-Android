@@ -34,8 +34,15 @@ interface TransformableProps {
   handleTint?: string;
   boundsWidth?: number | undefined;
   minY?: number;
+  // 位置と幅をキャンバスの内側へ丸めるか。回転した矢印のように「箱の左上」が
+  // 画面上の位置と一致しない要素は false にする（丸めると線が縮んで
+  // 図形どうしをつながなくなる）。
+  bounded?: boolean;
   // 読み上げ用の名前。「シール」「テキスト」など、何を掴んでいるかを伝える。
   label?: string;
+  // 中身をひとかたまりの読み上げ要素にまとめるか。編集できるテキストを含む
+  // 要素で true にすると、TalkBack が入力欄に降りられなくなるので false にする。
+  bodyAccessible?: boolean;
   deleteLabel?: string;
   secondaryAction?: SecondaryAction;
   onSelect: () => void;
@@ -71,7 +78,9 @@ export function Transformable({
   handleTint = colors.plum,
   boundsWidth,
   minY = 0,
+  bounded = true,
   label,
+  bodyAccessible = true,
   deleteLabel = "削除",
   secondaryAction,
   onSelect,
@@ -93,13 +102,14 @@ export function Transformable({
   const startAngle = useSharedValue(0);
 
   useEffect(() => {
-    const clampedW = boundsWidth !== undefined ? Math.max(minW, Math.min(w, boundsWidth)) : w;
-    const maxX = boundsWidth !== undefined ? Math.max(0, boundsWidth - clampedW) : Number.POSITIVE_INFINITY;
-    posX.value = Math.min(maxX, Math.max(0, x));
-    posY.value = Math.max(minY, y);
+    const clampable = bounded && boundsWidth !== undefined;
+    const clampedW = clampable ? Math.max(minW, Math.min(w, boundsWidth)) : w;
+    const maxX = clampable ? Math.max(0, boundsWidth - clampedW) : Number.POSITIVE_INFINITY;
+    posX.value = bounded ? Math.min(maxX, Math.max(0, x)) : x;
+    posY.value = bounded ? Math.max(minY, y) : y;
     sw.value = clampedW;
     srot.value = rot;
-  }, [x, y, w, rot, boundsWidth, minW, minY, posX, posY, sw, srot]);
+  }, [x, y, w, rot, bounded, boundsWidth, minW, minY, posX, posY, sw, srot]);
 
   const animStyle = useAnimatedStyle(() => ({
     transform: [{ translateX: posX.value }, { translateY: posY.value }, { rotate: `${srot.value}deg` }],
@@ -114,9 +124,16 @@ export function Transformable({
       startY.value = posY.value;
     })
     .onUpdate((e) => {
+      const nextX = startX.value + e.translationX;
+      const nextY = startY.value + e.translationY;
+      if (!bounded) {
+        posX.value = nextX;
+        posY.value = nextY;
+        return;
+      }
       const maxX = boundsWidth !== undefined ? Math.max(0, boundsWidth - sw.value) : 1e6;
-      posX.value = Math.min(maxX, Math.max(0, startX.value + e.translationX));
-      posY.value = Math.max(minY, startY.value + e.translationY);
+      posX.value = Math.min(maxX, Math.max(0, nextX));
+      posY.value = Math.max(minY, nextY);
     })
     .onEnd(() => {
       runOnJS(onChange)({ x: Math.round(posX.value), y: Math.round(posY.value) });
@@ -146,7 +163,7 @@ export function Transformable({
       const cy = m.pageY + m.height / 2;
       const d = Math.hypot(e.absoluteX - cx, e.absoluteY - cy);
       let next = Math.max(minW, Math.min(maxW, Math.round((startW.value * d) / startDist.value)));
-      if (boundsWidth !== undefined) next = Math.min(next, Math.max(minW, boundsWidth - posX.value));
+      if (bounded && boundsWidth !== undefined) next = Math.min(next, Math.max(minW, boundsWidth - posX.value));
       sw.value = next;
     })
     .onEnd(() => {
@@ -179,7 +196,7 @@ export function Transformable({
       <GestureDetector gesture={bodyGesture}>
         <View
           style={styles.body}
-          accessible={label !== undefined}
+          accessible={bodyAccessible && label !== undefined}
           accessibilityLabel={label}
           accessibilityState={{ selected }}
         >

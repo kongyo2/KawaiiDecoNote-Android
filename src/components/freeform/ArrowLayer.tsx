@@ -15,7 +15,7 @@ interface Geo {
   angle: number;
 }
 
-const ARROW_HEIGHT = 22;
+export const ARROW_HEIGHT = 22;
 const DEFAULT_SHAPE_HEIGHT = 44;
 
 function centerOf(shape: Shape, height: number, boundsWidth: number | undefined): { cx: number; cy: number } {
@@ -50,17 +50,7 @@ function geometryFor(
   };
 }
 
-function ArrowItem({
-  arrow,
-  geo,
-  selected,
-  boundsWidth,
-}: {
-  arrow: Arrow;
-  geo: Geo;
-  selected: boolean;
-  boundsWidth: number | undefined;
-}) {
+function ArrowItem({ arrow, geo, selected }: { arrow: Arrow; geo: Geo; selected: boolean }) {
   const select = useUi((s) => s.select);
   const updateArrow = useNotebooks((s) => s.updateArrow);
   const deleteArrow = useNotebooks((s) => s.deleteArrow);
@@ -96,7 +86,9 @@ function ArrowItem({
       selected={selected}
       bodyDraggable
       handleTint={chic.handle}
-      boundsWidth={boundsWidth}
+      // 矢印は回転させて使うので、箱の左上はキャンバス上の位置と一致しない。
+      // ここを紙の幅で丸めると、離れた図形をつなぐ長い線が縮んで届かなくなる。
+      bounded={false}
       label="つなぎ線"
       deleteLabel="このつなぎ線を消す"
       {...(arrow.manual
@@ -130,15 +122,7 @@ export function ArrowLayer({
       {page.arrows.map((arrow) => {
         const geo = geometryFor(arrow, page.shapes, heights, boundsWidth);
         if (!geo) return null;
-        return (
-          <ArrowItem
-            key={arrow.id}
-            arrow={arrow}
-            geo={geo}
-            selected={selectedId === arrow.id}
-            boundsWidth={boundsWidth}
-          />
-        );
+        return <ArrowItem key={arrow.id} arrow={arrow} geo={geo} selected={selectedId === arrow.id} />;
       })}
     </>
   );

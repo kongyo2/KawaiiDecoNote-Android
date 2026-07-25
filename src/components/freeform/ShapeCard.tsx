@@ -1,7 +1,9 @@
+import { useEffect, useRef } from "react";
 import { StyleSheet, TextInput, View } from "react-native";
 import type { LayoutChangeEvent } from "react-native";
 import { chic, colors, radii, shadows, space, text } from "@/lib/theme";
 import { useNotebooks } from "@/state/notebooks";
+import { useUi } from "@/state/ui";
 import { SHAPE_MAX_WIDTH, SHAPE_MIN_WIDTH } from "@/lib/types";
 import type { Shape } from "@/lib/types";
 import { GRIP_RESERVE, Transformable } from "@/components/transform/Transformable";
@@ -29,6 +31,17 @@ export function ShapeCard({
   const setShapeText = useNotebooks((s) => s.setShapeText);
   const updateShape = useNotebooks((s) => s.updateShape);
   const deleteShape = useNotebooks((s) => s.deleteShape);
+  const focusId = useUi((s) => s.focusId);
+  const setFocus = useUi((s) => s.setFocus);
+  const inputRef = useRef<TextInput>(null);
+
+  // 「＋テキスト」で置いたばかりのカードは、選択され次第そのまま書き始められるようにする。
+  // 入力欄は選択中しか editable にならないので、選択が乗るのを待ってから focus する。
+  useEffect(() => {
+    if (focusId !== shape.id || !selected) return;
+    setFocus(null);
+    inputRef.current?.focus();
+  }, [focusId, shape.id, selected, setFocus]);
 
   const onChange = (patch: TransformPatch) => updateShape(shape.id, patch);
   const onLayout = (e: LayoutChangeEvent) => onMeasureHeight(shape.id, e.nativeEvent.layout.height);
@@ -49,6 +62,8 @@ export function ShapeCard({
       boundsWidth={boundsWidth}
       minY={GRIP_RESERVE}
       label={preview ? `テキスト「${preview}」` : "空のテキスト"}
+      // 中に編集できる入力欄があるので、ひとかたまりの読み上げ要素にはまとめない。
+      bodyAccessible={false}
       deleteLabel="このテキストを消す"
       onSelect={() => (connectMode ? onConnectTap(shape.id) : onSelect())}
       onChange={onChange}
@@ -56,6 +71,7 @@ export function ShapeCard({
     >
       <View style={[styles.card, connectPending && styles.pending]} onLayout={onLayout}>
         <TextInput
+          ref={inputRef}
           value={shape.text}
           onChangeText={(t) => setShapeText(shape.id, t)}
           multiline

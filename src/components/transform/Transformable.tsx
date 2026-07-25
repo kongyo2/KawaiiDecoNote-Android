@@ -319,9 +319,10 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: "700",
   },
+  // 回転つまみ（左上）・削除（右上）・拡大つまみ（右下）とぶつからない角に置く。
   secondary: {
     position: "absolute",
-    top: -10,
+    bottom: -10,
     left: -10,
     width: 20,
     height: 20,

@@ -7,17 +7,21 @@ import { useUi } from "@/state/ui";
 export function Toast() {
   const toast = useUi((s) => s.toast);
   const insets = useSafeAreaInsets();
-  if (!toast) return null;
 
+  // 入れ物は出しっぱなしにして、中身だけ差し替える。読み上げ領域ごと
+  // 出し入れすると Android には「新しく現れた」としか伝わらず、
+  // 知らせが読み上げられないことがあるため。
   return (
     <View
       style={[styles.holder, { bottom: insets.bottom + TRAY_BASE_HEIGHT + space.md }]}
       pointerEvents="none"
       accessibilityLiveRegion="polite"
     >
-      <Animated.View entering={FadeInDown.duration(220)} exiting={FadeOutDown.duration(220)} style={styles.toast}>
-        <Text style={styles.text}>{toast}</Text>
-      </Animated.View>
+      {toast ? (
+        <Animated.View entering={FadeInDown.duration(220)} exiting={FadeOutDown.duration(220)} style={styles.toast}>
+          <Text style={styles.text}>{toast}</Text>
+        </Animated.View>
+      ) : null}
     </View>
   );
 }

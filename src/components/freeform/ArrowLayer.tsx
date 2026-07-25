@@ -1,9 +1,9 @@
 import { StyleSheet, View } from "react-native";
 import { GRIP_RESERVE, Transformable } from "@/components/transform/Transformable";
 import type { TransformPatch } from "@/components/transform/Transformable";
-import { degrees } from "@/lib/format";
+import { clamp, degrees } from "@/lib/format";
 import { chic } from "@/lib/theme";
-import { ARROW_MAX_LENGTH, ARROW_MIN_LENGTH } from "@/lib/types";
+import { ARROW_MAX_LENGTH, ARROW_MIN_LENGTH, UNMEASURED_SHAPE_HEIGHT } from "@/lib/types";
 import type { Arrow, Page, Shape } from "@/lib/types";
 import { useNotebooks } from "@/state/notebooks";
 import { useUi } from "@/state/ui";
@@ -16,14 +16,18 @@ interface Geo {
 }
 
 export const ARROW_HEIGHT = 22;
-const DEFAULT_SHAPE_HEIGHT = 44;
+
+// 手で動かした矢印の中心を紙の中に留めておくための余白。線そのものは
+// 回転して紙からはみ出してもよいが、中心（＝掴める場所）が紙の外に出ると
+// 選び直せず、消すことも戻すこともできなくなる。
+const CENTER_MARGIN = 24;
 
 function centerOf(shape: Shape, height: number, boundsWidth: number | undefined): { cx: number; cy: number } {
   const w = boundsWidth !== undefined ? Math.min(shape.w, boundsWidth) : shape.w;
   const maxX = boundsWidth !== undefined ? Math.max(0, boundsWidth - w) : Number.POSITIVE_INFINITY;
   const x = Math.min(maxX, Math.max(0, shape.x));
   const y = Math.max(GRIP_RESERVE, shape.y);
-  return { cx: x + w / 2, cy: y + (height || DEFAULT_SHAPE_HEIGHT) / 2 };
+  return { cx: x + w / 2, cy: y + (height || UNMEASURED_SHAPE_HEIGHT) / 2 };
 }
 
 function geometryFor(
@@ -38,8 +42,8 @@ function geometryFor(
   const from = shapes.find((s) => s.id === arrow.from);
   const to = shapes.find((s) => s.id === arrow.to);
   if (!from || !to) return null;
-  const a = centerOf(from, heights[from.id] ?? DEFAULT_SHAPE_HEIGHT, boundsWidth);
-  const b = centerOf(to, heights[to.id] ?? DEFAULT_SHAPE_HEIGHT, boundsWidth);
+  const a = centerOf(from, heights[from.id] ?? UNMEASURED_SHAPE_HEIGHT, boundsWidth);
+  const b = centerOf(to, heights[to.id] ?? UNMEASURED_SHAPE_HEIGHT, boundsWidth);
   const dx = b.cx - a.cx;
   const dy = b.cy - a.cy;
   return {
@@ -50,7 +54,17 @@ function geometryFor(
   };
 }
 
-function ArrowItem({ arrow, geo, selected }: { arrow: Arrow; geo: Geo; selected: boolean }) {
+function ArrowItem({
+  arrow,
+  geo,
+  selected,
+  boundsWidth,
+}: {
+  arrow: Arrow;
+  geo: Geo;
+  selected: boolean;
+  boundsWidth: number | undefined;
+}) {
   const select = useUi((s) => s.select);
   const updateArrow = useNotebooks((s) => s.updateArrow);
   const deleteArrow = useNotebooks((s) => s.deleteArrow);
@@ -62,14 +76,18 @@ function ArrowItem({ arrow, geo, selected }: { arrow: Arrow; geo: Geo; selected:
 
   // 中央＋長さ＋角度で持っている矢印を、左上＋幅＋回転で扱う Transformable に橋渡しする。
   // ドラッグ・拡大・回転のどれかを触った時点で「手動配置」に切り替わる。
+  // 丸めるのは箱の左上ではなく中心。回転した矢印では箱の左上が紙の外に出るのは
+  // 正常（縦向きの線など）なので、掴める中心のほうを紙の中に留める。
   const onChange = (patch: TransformPatch) => {
     const nextLen = patch.w ?? len;
-    const nextLeft = patch.x ?? left;
-    const nextTop = patch.y ?? top;
+    const cx = (patch.x ?? left) + nextLen / 2;
+    const cy = (patch.y ?? top) + ARROW_HEIGHT / 2;
     updateArrow(arrow.id, {
       manual: true,
-      mx: Math.round(nextLeft + nextLen / 2),
-      my: Math.round(nextTop + ARROW_HEIGHT / 2),
+      mx: Math.round(
+        boundsWidth === undefined ? cx : clamp(cx, CENTER_MARGIN, Math.max(CENTER_MARGIN, boundsWidth - CENTER_MARGIN)),
+      ),
+      my: Math.round(Math.max(CENTER_MARGIN, cy)),
       length: Math.round(nextLen),
       angle: Math.round(patch.rot ?? geo.angle),
     });
@@ -122,7 +140,15 @@ export function ArrowLayer({
       {page.arrows.map((arrow) => {
         const geo = geometryFor(arrow, page.shapes, heights, boundsWidth);
         if (!geo) return null;
-        return <ArrowItem key={arrow.id} arrow={arrow} geo={geo} selected={selectedId === arrow.id} />;
+        return (
+          <ArrowItem
+            key={arrow.id}
+            arrow={arrow}
+            geo={geo}
+            selected={selectedId === arrow.id}
+            boundsWidth={boundsWidth}
+          />
+        );
       })}
     </>
   );

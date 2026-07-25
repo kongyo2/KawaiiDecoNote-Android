@@ -35,34 +35,41 @@ export function BoardTabs({
         const active = p.id === notebook.activePageId;
         const title = pageDisplayTitle(p);
         return (
-          <Pressable
+          // タブの外枠は押せない容れ物にして、ページ切り替えとコピー・削除を
+          // 兄弟に並べる。押せる要素を入れ子にすると TalkBack が外側だけを
+          // ひとかたまりで拾い、中のボタンに降りられなくなるため。
+          <View
             key={p.id}
             style={[
               styles.tab,
               isNoteStyle ? styles.tabChic : null,
               active ? (isNoteStyle ? styles.tabChicActive : styles.tabActive) : null,
             ]}
-            onPress={() => onSelect(p.id)}
-            accessibilityRole="tab"
-            accessibilityState={{ selected: active }}
-            accessibilityLabel={`${title}のページ`}
           >
             {/* 見出しインデックスの「つまみ」。開いているページだけ色が乗る */}
             {active && !isNoteStyle ? (
               <View style={[styles.tabMark, { backgroundColor: notebook.color }]} pointerEvents="none" />
             ) : null}
 
-            <Text
-              style={[
-                styles.tabText,
-                isNoteStyle ? styles.tabTextChic : null,
-                active ? styles.tabTextActive : null,
-                active && isNoteStyle ? styles.tabTextChicActive : null,
-              ]}
-              numberOfLines={1}
+            <Pressable
+              style={styles.tabLabel}
+              onPress={() => onSelect(p.id)}
+              accessibilityRole="tab"
+              accessibilityState={{ selected: active }}
+              accessibilityLabel={`${title}のページ`}
             >
-              {tabIcon(notebook, p)} {title}
-            </Text>
+              <Text
+                style={[
+                  styles.tabText,
+                  isNoteStyle ? styles.tabTextChic : null,
+                  active ? styles.tabTextActive : null,
+                  active && isNoteStyle ? styles.tabTextChicActive : null,
+                ]}
+                numberOfLines={1}
+              >
+                {tabIcon(notebook, p)} {title}
+              </Text>
+            </Pressable>
 
             {active ? (
               <View style={styles.tabActions}>
@@ -83,7 +90,7 @@ export function BoardTabs({
                 />
               </View>
             ) : null}
-          </Pressable>
+          </View>
         );
       })}
 
@@ -120,9 +127,7 @@ const styles = StyleSheet.create({
   tab: {
     maxWidth: 230,
     minHeight: 34,
-    paddingVertical: 7,
-    paddingLeft: space.md,
-    paddingRight: space.md,
+    paddingRight: space.sm,
     borderTopLeftRadius: 14,
     borderTopRightRadius: 14,
     borderBottomLeftRadius: 4,
@@ -137,8 +142,15 @@ const styles = StyleSheet.create({
   tabActive: {
     backgroundColor: colors.white,
     borderColor: colors.lavender,
-    paddingTop: 10,
+    paddingTop: 3,
     boxShadow: shadows.chip,
+  },
+  // ページ切り替えの当たり判定。文字のまわり全部を押せるようにする。
+  tabLabel: {
+    flexShrink: 1,
+    paddingVertical: 7,
+    paddingLeft: space.md,
+    paddingRight: 6,
   },
   // 開いているページの上端に走る色帯＝インデックスのつまみ。
   tabMark: {
@@ -150,11 +162,16 @@ const styles = StyleSheet.create({
   },
   tabChic: {
     backgroundColor: "transparent",
-    borderRadius: 0,
+    // React Native では borderRadius より個別の角指定が優先されるので、
+    // 平らにしたいときは4隅ぶんを明示的に 0 にする。
+    borderTopLeftRadius: 0,
+    borderTopRightRadius: 0,
+    borderBottomLeftRadius: 0,
+    borderBottomRightRadius: 0,
     borderWidth: 0,
     borderBottomWidth: 2,
     borderBottomColor: "transparent",
-    paddingHorizontal: space.sm,
+    paddingRight: space.xs,
   },
   tabChicActive: {
     borderBottomColor: chicTheme.rule,

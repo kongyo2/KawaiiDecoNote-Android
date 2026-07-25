@@ -686,6 +686,7 @@ describe("duplicatePage", () => {
     expect(copy.stickers[0]?.id).not.toBe("st1");
     expect(copy.shapes.map((s) => s.text)).toEqual(["A", "B"]);
     expect(copy.shapes[0]?.id).not.toBe("sh1");
+    expect(copy.photos[0]?.id).not.toBe("ph1");
     expect(copy.photos[0]?.dataUrl).toBe("data:image/png;base64,AAAA");
   });
 

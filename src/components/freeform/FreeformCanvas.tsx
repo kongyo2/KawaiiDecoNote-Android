@@ -3,6 +3,7 @@ import { Pressable, StyleSheet, Text, View } from "react-native";
 import { chic, colors, radii, space, text } from "@/lib/theme";
 import { useNotebooks } from "@/state/notebooks";
 import { useUi } from "@/state/ui";
+import { UNMEASURED_SHAPE_HEIGHT } from "@/lib/types";
 import type { Page } from "@/lib/types";
 import { StickerItem } from "@/components/board/StickerItem";
 import { ARROW_HEIGHT, ArrowLayer } from "./ArrowLayer";
@@ -11,7 +12,6 @@ import { ShapeCard } from "./ShapeCard";
 
 const CANVAS_MIN_HEIGHT = 460;
 const BOTTOM_ROOM = 120;
-const ASSUMED_SHAPE_HEIGHT = 120;
 
 export function FreeformCanvas({ page }: { page: Page }) {
   const addArrow = useNotebooks((s) => s.addArrow);
@@ -45,7 +45,7 @@ export function FreeformCanvas({ page }: { page: Page }) {
   // 置いたものの一番下に合わせて紙を伸ばす。下にはいつも書き足せる余白を残す。
   const minHeight = useMemo(() => {
     let maxY = 0;
-    for (const s of page.shapes) maxY = Math.max(maxY, s.y + (heights[s.id] ?? ASSUMED_SHAPE_HEIGHT));
+    for (const s of page.shapes) maxY = Math.max(maxY, s.y + (heights[s.id] ?? UNMEASURED_SHAPE_HEIGHT));
     for (const p of page.photos) maxY = Math.max(maxY, p.y + (heights[p.id] ?? p.w));
     for (const s of page.stickers) maxY = Math.max(maxY, s.y + s.size);
     // 手で動かした矢印は図形から位置が離れるので、別途いちばん下を見る。

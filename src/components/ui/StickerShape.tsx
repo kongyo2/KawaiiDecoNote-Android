@@ -1,6 +1,11 @@
 import type { ReactElement } from "react";
 import Svg, { Circle, Ellipse, G, Line, Path, Rect } from "react-native-svg";
+import { palette } from "@/lib/theme";
 import type { StickerType } from "@/lib/types";
+
+// シールの線に使う色（塗りの c1/c2 とは別に固定で持つぶん）。
+const OUTLINE = palette.white;
+const ANTENNA = "#7A6A90";
 
 interface StickerShapeProps {
   type: StickerType;
@@ -21,8 +26,8 @@ interface StickerDef {
 const STICKERS: Record<StickerType, StickerDef> = {
   star: {
     label: "星",
-    c1: "#F4D58D",
-    c2: "#FFFFFF",
+    c1: palette.gold,
+    c2: palette.white,
     draw: (c1, c2) => (
       <Path
         d="M22 3 L27 16 L41 17 L30 26 L34 40 L22 32 L10 40 L14 26 L3 17 L17 16 Z"
@@ -34,8 +39,8 @@ const STICKERS: Record<StickerType, StickerDef> = {
   },
   flower: {
     label: "花",
-    c1: "#E8B4BC",
-    c2: "#F4D58D",
+    c1: palette.rose,
+    c2: palette.gold,
     draw: (c1, c2) => (
       <G>
         <Ellipse cx={22} cy={12} rx={7} ry={9} fill={c1} />
@@ -52,15 +57,15 @@ const STICKERS: Record<StickerType, StickerDef> = {
   },
   heart: {
     label: "ハート",
-    c1: "#E8B4BC",
-    c2: "#E8B4BC",
+    c1: palette.rose,
+    c2: palette.rose,
     draw: (c1) => (
       <Path d="M22 38 C6 27 4 16 12 10 C18 6 22 11 22 14 C22 11 26 6 32 10 C40 16 38 27 22 38 Z" fill={c1} />
     ),
   },
   ribbon: {
     label: "リボン",
-    c1: "#C9B6E4",
+    c1: palette.lavender,
     c2: "#FFF8F2",
     draw: (c1, c2) => (
       <G>
@@ -72,15 +77,15 @@ const STICKERS: Record<StickerType, StickerDef> = {
   },
   sparkle: {
     label: "きらめき",
-    c1: "#F4D58D",
-    c2: "#F4D58D",
+    c1: palette.gold,
+    c2: palette.gold,
     draw: (c1) => (
       <Path d="M22 2 C23 14 24 20 42 22 C24 24 23 30 22 42 C21 30 20 24 2 22 C20 20 21 14 22 2 Z" fill={c1} />
     ),
   },
   cloud: {
     label: "くも",
-    c1: "#FFFFFF",
+    c1: palette.white,
     c2: "#B8D8F0",
     draw: (c1, c2) => (
       <G>
@@ -93,8 +98,8 @@ const STICKERS: Record<StickerType, StickerDef> = {
   },
   moon: {
     label: "三日月",
-    c1: "#F4D58D",
-    c2: "#F4D58D",
+    c1: palette.gold,
+    c2: palette.gold,
     draw: (c1) => (
       <G>
         <Path d="M28 6 C18 6 10 14 10 24 C10 34 18 42 28 42 C20 40 15 33 15 24 C15 15 20 8 28 6 Z" fill={c1} />
@@ -107,12 +112,12 @@ const STICKERS: Record<StickerType, StickerDef> = {
   },
   crown: {
     label: "王冠",
-    c1: "#F4D58D",
-    c2: "#E8B4BC",
+    c1: palette.gold,
+    c2: palette.rose,
     draw: (c1, c2) => (
       <G>
-        <Path d="M6 30 L9 13 L17 22 L22 9 L27 22 L35 13 L38 30 Z" fill={c1} stroke="#FFFFFF" strokeWidth={1.2} />
-        <Rect x={6} y={30} width={32} height={6} rx={2} fill={c1} stroke="#FFFFFF" strokeWidth={1.2} />
+        <Path d="M6 30 L9 13 L17 22 L22 9 L27 22 L35 13 L38 30 Z" fill={c1} stroke={OUTLINE} strokeWidth={1.2} />
+        <Rect x={6} y={30} width={32} height={6} rx={2} fill={c1} stroke={OUTLINE} strokeWidth={1.2} />
         <Circle cx={22} cy={11} r={2.4} fill={c2} />
         <Circle cx={9} cy={15.5} r={2} fill={c2} />
         <Circle cx={35} cy={15.5} r={2} fill={c2} />
@@ -121,22 +126,22 @@ const STICKERS: Record<StickerType, StickerDef> = {
   },
   butterfly: {
     label: "ちょうちょ",
-    c1: "#C9B6E4",
-    c2: "#E8B4BC",
+    c1: palette.lavender,
+    c2: palette.rose,
     draw: (c1, c2) => (
       <G>
         <Path d="M22 22 C15 8 2 8 4 20 C5 28 15 26 22 22 Z" fill={c1} />
         <Path d="M22 22 C29 8 42 8 40 20 C39 28 29 26 22 22 Z" fill={c1} />
         <Path d="M22 22 C17 30 8 34 8 40 C8 44 16 42 22 34 Z" fill={c2} />
         <Path d="M22 22 C27 30 36 34 36 40 C36 44 28 42 22 34 Z" fill={c2} />
-        <Line x1={22} y1={9} x2={22} y2={36} stroke="#7A6A90" strokeWidth={1.6} />
+        <Line x1={22} y1={9} x2={22} y2={36} stroke={ANTENNA} strokeWidth={1.6} />
       </G>
     ),
   },
   paw: {
     label: "にくきゅう",
-    c1: "#E8B4BC",
-    c2: "#E8B4BC",
+    c1: palette.rose,
+    c2: palette.rose,
     draw: (c1) => (
       <G>
         <Ellipse cx={22} cy={28} rx={11} ry={9} fill={c1} />
@@ -149,8 +154,8 @@ const STICKERS: Record<StickerType, StickerDef> = {
   },
   gem: {
     label: "宝石",
-    c1: "#A8E6CF",
-    c2: "#FFFFFF",
+    c1: palette.mint,
+    c2: palette.white,
     draw: (c1, c2) => (
       <G>
         <Path d="M12 16 L22 6 L32 16 L38 18 L22 40 L6 18 Z" fill={c1} stroke={c2} strokeWidth={1.2} />

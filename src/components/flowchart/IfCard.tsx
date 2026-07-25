@@ -1,4 +1,5 @@
 import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import { successFeedback } from "@/lib/haptics";
 import { colors, radii, shadows, space, text } from "@/lib/theme";
 import { useNotebooks } from "@/state/notebooks";
 import { useUi } from "@/state/ui";
@@ -124,11 +125,16 @@ function BranchStepRow({ branch, position }: { branch: NormalStep; position: Pos
   const focusId = useUi((s) => s.focusId);
   const setFocus = useUi((s) => s.setFocus);
 
+  // 手ごたえは工程カードと揃える（紙吹雪は最上位の工程だけの演出のまま）。
+  const onCheck = () => {
+    if (toggleStep(branch.id)) successFeedback();
+  };
+
   return (
     <View style={styles.branchStep}>
       <Pressable
         style={[styles.bcheck, branch.done && styles.bcheckDone]}
-        onPress={() => toggleStep(branch.id)}
+        onPress={onCheck}
         hitSlop={8}
         accessibilityRole="checkbox"
         accessibilityState={{ checked: branch.done }}

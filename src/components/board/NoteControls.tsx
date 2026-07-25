@@ -43,7 +43,11 @@ export function NoteControls({
               accessibilityState={{ selected }}
               accessibilityLabel={colorLabel(PAPER_COLOR_LABELS, c)}
               hitSlop={6}
-            />
+            >
+              {/* 用紙色は淡い色ばかりなので、選択中かどうかを枠の色だけに
+                  頼らせない。チェックを重ねて形でも分かるようにする。 */}
+              {selected ? <Text style={styles.swatchCheck}>✓</Text> : null}
+            </Pressable>
           );
         })}
       </View>
@@ -73,8 +77,15 @@ const styles = StyleSheet.create({
     borderRadius: 6,
     borderWidth: 2,
     borderColor: chic.border,
+    alignItems: "center",
+    justifyContent: "center",
   },
   swatchActive: {
     borderColor: chic.rule,
+  },
+  swatchCheck: {
+    fontSize: 12,
+    lineHeight: 14,
+    color: chic.rule,
   },
 });

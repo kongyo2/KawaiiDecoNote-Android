@@ -177,6 +177,10 @@ export const SHAPE_MIN_WIDTH = 80;
 export const SHAPE_MAX_WIDTH = 420;
 export const SHAPE_DEFAULT_WIDTH = 150;
 
+// onLayout がまだ走っていないテキストカードの高さの見積もり。
+// キャンバスの高さ計算と矢印の中心計算で同じ値を使う。
+export const UNMEASURED_SHAPE_HEIGHT = 44;
+
 export const PHOTO_MIN_WIDTH = 60;
 export const PHOTO_MAX_WIDTH = 420;
 export const PHOTO_DEFAULT_WIDTH = 140;

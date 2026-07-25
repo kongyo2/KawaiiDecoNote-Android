@@ -27,6 +27,7 @@ function Progress({ done, total }: { done: number; total: number }) {
       style={styles.progress}
       accessibilityRole="progressbar"
       accessibilityLabel={`${total}工程のうち${done}つ完了`}
+      accessibilityValue={{ min: 0, max: total, now: done }}
     >
       <View style={styles.progressTrack}>
         <View style={[styles.progressFill, { width: `${Math.round(ratio * 100)}%` }]} />

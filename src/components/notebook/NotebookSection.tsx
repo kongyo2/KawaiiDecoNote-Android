@@ -1,19 +1,22 @@
 import { StyleSheet, TextInput, View } from "react-native";
 import Svg, { Defs, Line, Pattern, Rect } from "react-native-svg";
-import { colors, fonts } from "@/lib/theme";
+import { colors, text } from "@/lib/theme";
 import { useNotebooks } from "@/state/notebooks";
 import type { Page } from "@/lib/types";
+import { useSvgId } from "@/components/ui/Gradient";
 
 const LINE_HEIGHT = 32;
+const MIN_HEIGHT = 280;
 
 export function NotebookSection({ page }: { page: Page }) {
   const setNote = useNotebooks((s) => s.setNote);
+  const rule = useSvgId("noteRule");
 
   return (
     <View style={styles.wrap}>
       <Svg style={StyleSheet.absoluteFill} width="100%" height="100%">
         <Defs>
-          <Pattern id="rule" width={LINE_HEIGHT} height={LINE_HEIGHT} patternUnits="userSpaceOnUse">
+          <Pattern id={rule} width={LINE_HEIGHT} height={LINE_HEIGHT} patternUnits="userSpaceOnUse">
             <Line
               x1="0"
               y1={LINE_HEIGHT - 0.5}
@@ -24,14 +27,15 @@ export function NotebookSection({ page }: { page: Page }) {
             />
           </Pattern>
         </Defs>
-        <Rect x="0" y="0" width="100%" height="100%" fill="url(#rule)" />
+        <Rect x="0" y="0" width="100%" height="100%" fill={`url(#${rule})`} />
       </Svg>
       <TextInput
         value={page.note}
         onChangeText={setNote}
         multiline
         placeholder="今日思ったこと、なんでも書いてね…"
-        placeholderTextColor="rgba(90,77,112,0.4)"
+        placeholderTextColor={colors.placeholder}
+        accessibilityLabel="自由帳の本文"
         style={styles.input}
       />
     </View>
@@ -40,12 +44,11 @@ export function NotebookSection({ page }: { page: Page }) {
 
 const styles = StyleSheet.create({
   wrap: {
-    minHeight: 280,
+    minHeight: MIN_HEIGHT,
   },
   input: {
-    minHeight: 280,
-    fontFamily: fonts.body,
-    fontSize: 15,
+    minHeight: MIN_HEIGHT,
+    ...text.bodyL,
     lineHeight: LINE_HEIGHT,
     color: colors.ink,
     paddingHorizontal: 4,

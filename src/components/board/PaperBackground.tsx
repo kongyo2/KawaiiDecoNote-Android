@@ -1,35 +1,43 @@
+import type { ReactNode } from "react";
 import { StyleSheet } from "react-native";
 import Svg, { Circle, Defs, Path, Pattern, Rect } from "react-native-svg";
+import { colors } from "@/lib/theme";
 import type { RuleStyle } from "@/lib/types";
+import { useSvgId } from "@/components/ui/Gradient";
 
-const STROKE = "rgba(155,130,180,0.35)";
+// 罫線ごとの1タイル。userSpaceOnUse の Pattern で紙全体に敷き詰める。
+const TILE: Record<RuleStyle, { size: number; draw: (stroke: string) => ReactNode }> = {
+  grid: {
+    size: 28,
+    draw: (stroke) => <Path d="M0 27.5 H28 M27.5 0 V28" stroke={stroke} strokeWidth={1} />,
+  },
+  dot: {
+    size: 16,
+    draw: (stroke) => <Circle cx={8} cy={8} r={1.2} fill={stroke} />,
+  },
+  blank: {
+    size: 8,
+    draw: () => null,
+  },
+  lines: {
+    size: 32,
+    draw: (stroke) => <Path d="M0 31.5 H32" stroke={stroke} strokeWidth={1} />,
+  },
+};
 
 export function PaperBackground({ ruleStyle, color }: { ruleStyle: RuleStyle; color: string }) {
+  const id = useSvgId("paper");
+  const tile = TILE[ruleStyle];
+
   return (
     <Svg style={StyleSheet.absoluteFill} width="100%" height="100%">
       <Defs>
-        {ruleStyle === "grid" ? (
-          <Pattern id="pat" width={28} height={28} patternUnits="userSpaceOnUse">
-            <Rect width={28} height={28} fill={color} />
-            <Path d="M0 27.5 H28 M27.5 0 V28" stroke={STROKE} strokeWidth={1} />
-          </Pattern>
-        ) : ruleStyle === "dot" ? (
-          <Pattern id="pat" width={16} height={16} patternUnits="userSpaceOnUse">
-            <Rect width={16} height={16} fill={color} />
-            <Circle cx={8} cy={8} r={1.2} fill={STROKE} />
-          </Pattern>
-        ) : ruleStyle === "blank" ? (
-          <Pattern id="pat" width={8} height={8} patternUnits="userSpaceOnUse">
-            <Rect width={8} height={8} fill={color} />
-          </Pattern>
-        ) : (
-          <Pattern id="pat" width={32} height={32} patternUnits="userSpaceOnUse">
-            <Rect width={32} height={32} fill={color} />
-            <Path d="M0 31.5 H32" stroke={STROKE} strokeWidth={1} />
-          </Pattern>
-        )}
+        <Pattern id={id} width={tile.size} height={tile.size} patternUnits="userSpaceOnUse">
+          <Rect width={tile.size} height={tile.size} fill={color} />
+          {tile.draw(colors.line)}
+        </Pattern>
       </Defs>
-      <Rect x="0" y="0" width="100%" height="100%" fill="url(#pat)" />
+      <Rect x="0" y="0" width="100%" height="100%" fill={`url(#${id})`} />
     </Svg>
   );
 }

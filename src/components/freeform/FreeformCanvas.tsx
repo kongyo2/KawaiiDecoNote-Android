@@ -1,13 +1,17 @@
 import { useMemo, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
-import { colors, fonts } from "@/lib/theme";
+import { chic, colors, radii, space, text } from "@/lib/theme";
 import { useNotebooks } from "@/state/notebooks";
 import { useUi } from "@/state/ui";
+import { UNMEASURED_SHAPE_HEIGHT } from "@/lib/types";
 import type { Page } from "@/lib/types";
 import { StickerItem } from "@/components/board/StickerItem";
-import { ArrowLayer } from "./ArrowLayer";
+import { ARROW_HEIGHT, ArrowLayer } from "./ArrowLayer";
 import { PhotoCard } from "./PhotoCard";
 import { ShapeCard } from "./ShapeCard";
+
+const CANVAS_MIN_HEIGHT = 460;
+const BOTTOM_ROOM = 120;
 
 export function FreeformCanvas({ page }: { page: Page }) {
   const addArrow = useNotebooks((s) => s.addArrow);
@@ -38,21 +42,32 @@ export function FreeformCanvas({ page }: { page: Page }) {
 
   const isEmpty = page.shapes.length === 0 && page.photos.length === 0 && page.stickers.length === 0;
 
+  // 置いたものの一番下に合わせて紙を伸ばす。下にはいつも書き足せる余白を残す。
   const minHeight = useMemo(() => {
     let maxY = 0;
-    for (const s of page.shapes) maxY = Math.max(maxY, s.y + (heights[s.id] ?? 120));
+    for (const s of page.shapes) maxY = Math.max(maxY, s.y + (heights[s.id] ?? UNMEASURED_SHAPE_HEIGHT));
     for (const p of page.photos) maxY = Math.max(maxY, p.y + (heights[p.id] ?? p.w));
     for (const s of page.stickers) maxY = Math.max(maxY, s.y + s.size);
-    return Math.max(460, maxY + 120);
-  }, [page.shapes, page.photos, page.stickers, heights]);
+    // 手で動かした矢印は図形から位置が離れるので、別途いちばん下を見る。
+    // （回転を考えて、真下を向いた最悪ケースの長さで見積もる）
+    for (const a of page.arrows) {
+      if (a.manual) maxY = Math.max(maxY, a.my + a.length / 2 + ARROW_HEIGHT);
+    }
+    return Math.max(CANVAS_MIN_HEIGHT, maxY + BOTTOM_ROOM);
+  }, [page.shapes, page.photos, page.stickers, page.arrows, heights]);
 
   return (
     <View style={[styles.canvas, { minHeight }]} onLayout={(e) => setCanvasW(e.nativeEvent.layout.width)}>
-      <Pressable style={StyleSheet.absoluteFill} onPress={() => select(null)} />
+      <Pressable
+        style={StyleSheet.absoluteFill}
+        onPress={() => select(null)}
+        accessibilityRole="button"
+        accessibilityLabel="選択を解除"
+      />
 
       {isEmpty ? (
         <Text style={styles.hint} pointerEvents="none">
-          ここにテキストや写真、シールを{"\n"}自由に置いてみてね🌸
+          まっさらな1ページ。{"\n"}下の道具からテキスト・写真・シールを置いてみてね🌸
         </Text>
       ) : null}
 
@@ -95,7 +110,7 @@ export function FreeformCanvas({ page }: { page: Page }) {
       ))}
 
       {connectMode ? (
-        <View style={styles.connectBadge} pointerEvents="none">
+        <View style={styles.connectBadge} pointerEvents="none" accessibilityLiveRegion="polite">
           <Text style={styles.connectText}>
             {connectFromId ? "つなぎ先のテキストをタップ🔗" : "つなぎたいテキストを2つ順にタップ🔗"}
           </Text>
@@ -111,28 +126,25 @@ const styles = StyleSheet.create({
   },
   hint: {
     position: "absolute",
-    top: 40,
-    left: 24,
-    right: 24,
+    top: 44,
+    left: space.xl,
+    right: space.xl,
     textAlign: "center",
-    opacity: 0.4,
-    fontFamily: fonts.display,
-    fontSize: 15,
-    color: colors.chicInk,
-    lineHeight: 24,
+    opacity: 0.45,
+    ...text.handwritten,
+    color: chic.ink,
   },
   connectBadge: {
     position: "absolute",
-    top: 8,
+    top: space.sm,
     alignSelf: "center",
     backgroundColor: "rgba(58,58,58,0.85)",
-    borderRadius: 14,
+    borderRadius: radii.small,
     paddingVertical: 5,
-    paddingHorizontal: 12,
+    paddingHorizontal: space.md,
   },
   connectText: {
+    ...text.caption,
     color: colors.white,
-    fontFamily: fonts.body,
-    fontSize: 11,
   },
 });

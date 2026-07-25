@@ -1,13 +1,14 @@
 import { useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
-import { colors, fonts } from "@/lib/theme";
-import { PALETTE_COLORS } from "@/lib/types";
+import { colors, radii, shadows, space, text } from "@/lib/theme";
+import { colorLabel, COLOR_LABELS, DEFAULT_NOTEBOOK_COLOR, MAX_NOTEBOOK_NAME, PALETTE_COLORS } from "@/lib/types";
 import type { NotebookType } from "@/lib/types";
-import { AppButton, AppTextInput, Card } from "@/components/ui/kit";
+import { AppButton, AppTextInput, Card, PanelTitle } from "@/components/ui/kit";
+import { CoverArt } from "./CoverArt";
 
 const TYPE_OPTIONS: { key: NotebookType; label: string; sub: string }[] = [
-  { key: "notestyle", label: "📓 ノート式", sub: "白紙から自由にデコる" },
-  { key: "profile", label: "📔 プロフィール帳式", sub: "最初からかわいいテンプレ" },
+  { key: "notestyle", label: "📓 ノート式", sub: "白紙に自由に置いてデコる" },
+  { key: "profile", label: "📔 プロフィール帳式", sub: "飾り枠つきの工程ページ" },
 ];
 
 export function CreatePanel({
@@ -18,46 +19,65 @@ export function CreatePanel({
   onCancel: () => void;
 }) {
   const [type, setType] = useState<NotebookType>("profile");
-  const [color, setColor] = useState<string>(PALETTE_COLORS[0]);
+  const [color, setColor] = useState<string>(DEFAULT_NOTEBOOK_COLOR);
   const [name, setName] = useState("");
+
+  const previewName = name.trim() || (type === "notestyle" ? "無題のノート" : "無題のプロフィール帳");
 
   return (
     <Card style={styles.card}>
-      <Text style={styles.heading}>新しい手帳をつくる</Text>
+      <PanelTitle>新しい手帳をつくる</PanelTitle>
 
-      <View style={styles.typeRow}>
-        {TYPE_OPTIONS.map((opt) => {
-          const selected = type === opt.key;
-          return (
-            <Pressable
-              key={opt.key}
-              style={[styles.typeBtn, selected && styles.typeBtnSelected]}
-              onPress={() => setType(opt.key)}
-            >
-              <Text style={[styles.typeLabel, selected && styles.typeLabelSelected]}>{opt.label}</Text>
-              <Text style={styles.typeSub}>{opt.sub}</Text>
-            </Pressable>
-          );
-        })}
-      </View>
+      {/* 選んだ内容がそのまま表紙になる。作る前に仕上がりが見えるようにしている */}
+      <View style={styles.topRow}>
+        <View style={styles.preview}>
+          <CoverArt name={previewName} type={type} color={color} pageCount={1} />
+        </View>
 
-      <View style={styles.swatches}>
-        {PALETTE_COLORS.map((c) => (
-          <Pressable
-            key={c}
-            style={[styles.swatch, { backgroundColor: c }, color === c && styles.swatchSelected]}
-            onPress={() => setColor(c)}
-          />
-        ))}
+        <View style={styles.typeColumn}>
+          {TYPE_OPTIONS.map((opt) => {
+            const selected = type === opt.key;
+            return (
+              <Pressable
+                key={opt.key}
+                style={({ pressed }) => [styles.typeBtn, selected && styles.typeBtnSelected, pressed && styles.pressed]}
+                onPress={() => setType(opt.key)}
+                accessibilityRole="radio"
+                accessibilityState={{ selected }}
+              >
+                <Text style={[styles.typeLabel, selected && styles.typeLabelSelected]}>{opt.label}</Text>
+                <Text style={styles.typeSub}>{opt.sub}</Text>
+              </Pressable>
+            );
+          })}
+        </View>
       </View>
 
       <AppTextInput
         value={name}
         onChangeText={setName}
         placeholder="手帳のなまえ"
-        maxLength={30}
+        maxLength={MAX_NOTEBOOK_NAME}
         style={styles.nameInput}
       />
+
+      <Text style={styles.sectionLabel}>表紙の色</Text>
+      <View style={styles.swatches}>
+        {PALETTE_COLORS.map((c) => {
+          const selected = color === c;
+          return (
+            <Pressable
+              key={c}
+              style={[styles.swatch, { backgroundColor: c }, selected && styles.swatchSelected]}
+              onPress={() => setColor(c)}
+              accessibilityRole="radio"
+              accessibilityState={{ selected }}
+              accessibilityLabel={colorLabel(COLOR_LABELS, c)}
+              hitSlop={6}
+            />
+          );
+        })}
+      </View>
 
       <View style={styles.actions}>
         <AppButton
@@ -74,55 +94,66 @@ export function CreatePanel({
 
 const styles = StyleSheet.create({
   card: {
-    marginTop: 18,
+    marginTop: space.lg,
   },
-  heading: {
-    fontFamily: fonts.display,
-    fontSize: 16,
-    color: colors.plum,
-    marginBottom: 12,
-  },
-  typeRow: {
+  topRow: {
     flexDirection: "row",
-    gap: 10,
-    marginBottom: 14,
+    gap: space.md,
+    marginBottom: space.md,
+  },
+  preview: {
+    width: 92,
+    aspectRatio: 3 / 4,
+    borderRadius: radii.card,
+    boxShadow: shadows.raised,
+  },
+  typeColumn: {
+    flex: 1,
+    gap: space.sm,
+    justifyContent: "center",
   },
   typeBtn: {
-    flex: 1,
     borderRadius: 14,
     borderWidth: 1.5,
     borderColor: colors.hairline,
     backgroundColor: colors.white,
-    paddingVertical: 10,
-    paddingHorizontal: 8,
-    alignItems: "center",
+    paddingVertical: space.sm,
+    paddingHorizontal: space.md,
   },
   typeBtnSelected: {
     borderColor: colors.lavender,
     backgroundColor: "rgba(201,182,228,0.25)",
   },
+  pressed: {
+    opacity: 0.75,
+  },
   typeLabel: {
-    fontFamily: fonts.body,
-    fontSize: 12,
+    ...text.label,
     color: colors.ink,
-    textAlign: "center",
   },
   typeLabelSelected: {
-    fontFamily: fonts.bodyBold,
+    ...text.labelBold,
   },
   typeSub: {
-    fontFamily: fonts.body,
-    fontSize: 10,
+    ...text.micro,
     color: colors.ink,
     opacity: 0.6,
-    marginTop: 3,
-    textAlign: "center",
+    marginTop: 2,
+  },
+  nameInput: {
+    marginBottom: space.md,
+  },
+  sectionLabel: {
+    ...text.caption,
+    color: colors.ink,
+    opacity: 0.7,
+    marginBottom: space.xs,
   },
   swatches: {
     flexDirection: "row",
     flexWrap: "wrap",
-    gap: 10,
-    marginBottom: 14,
+    gap: space.md,
+    marginBottom: space.lg,
   },
   swatch: {
     width: 28,
@@ -134,12 +165,9 @@ const styles = StyleSheet.create({
   swatchSelected: {
     borderColor: colors.plum,
   },
-  nameInput: {
-    marginBottom: 14,
-  },
   actions: {
     flexDirection: "row",
-    gap: 8,
+    gap: space.sm,
     alignItems: "center",
   },
   flex: {

@@ -1,5 +1,5 @@
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import type { LayoutChangeEvent } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -15,11 +15,18 @@ import { NotebookSection } from "@/components/notebook/NotebookSection";
 import { exportBackup } from "@/lib/backup";
 import { captureAndShare } from "@/lib/capture";
 import { pickPhotoAsDataUrl } from "@/lib/files";
-import { colors, fonts, TRAY_BASE_HEIGHT } from "@/lib/theme";
+import { randomBetween } from "@/lib/format";
+import { tapFeedback } from "@/lib/haptics";
+import { notebookDisplayName, pageDisplayTitle } from "@/lib/model";
+import { chic, colors, fonts, radii, shadows, space, text, TRAY_BASE_HEIGHT } from "@/lib/theme";
+import { MAX_PAGE_TITLE } from "@/lib/types";
 import type { StickerType } from "@/lib/types";
 import { useImportBackup } from "@/state/backup";
-import { selectCurrentNotebook, selectCurrentPage, useNotebooks } from "@/state/notebooks";
+import { activePageOf, selectNotebookById, useNotebooks } from "@/state/notebooks";
 import { useUi } from "@/state/ui";
+
+// 選択中のシールを画面から消してから撮るための待ち時間。
+const CAPTURE_SETTLE_MS = 70;
 
 export default function NotebookEditor() {
   const params = useLocalSearchParams<{ id: string }>();
@@ -29,13 +36,17 @@ export default function NotebookEditor() {
   const boardRef = useRef<View>(null);
   const [boardWidth, setBoardWidth] = useState(320);
 
-  const notebook = useNotebooks(selectCurrentNotebook);
-  const page = useNotebooks(selectCurrentPage);
+  // ルートの id から直接引く。ストアの activeNotebookId を待たないので、
+  // 画面に入った1フレーム目で「手帳が見つかりません」が出ることがない。
+  const selectNotebook = useMemo(() => selectNotebookById(id), [id]);
+  const notebook = useNotebooks(selectNotebook);
+  const page = activePageOf(notebook);
   const canUndo = useNotebooks((s) => s.canUndo);
   const storageOk = useNotebooks((s) => s.storageOk);
 
   const setActivePage = useNotebooks((s) => s.setActivePage);
   const deletePage = useNotebooks((s) => s.deletePage);
+  const duplicatePage = useNotebooks((s) => s.duplicatePage);
   const addPage = useNotebooks((s) => s.addPage);
   const setPageTitle = useNotebooks((s) => s.setPageTitle);
   const setFrame = useNotebooks((s) => s.setFrame);
@@ -46,7 +57,6 @@ export default function NotebookEditor() {
   const addSticker = useNotebooks((s) => s.addSticker);
   const addShape = useNotebooks((s) => s.addShape);
   const addPhotoTo = useNotebooks((s) => s.addPhotoTo);
-  const undo = useNotebooks((s) => s.undo);
 
   const connectMode = useUi((s) => s.connectMode);
   const select = useUi((s) => s.select);
@@ -75,29 +85,41 @@ export default function NotebookEditor() {
   if (!notebook || !page) {
     return (
       <View style={[styles.missing, { paddingTop: insets.top + 40 }]}>
-        <Text style={styles.missingText}>手帳が見つかりませんでした</Text>
-        <Pressable onPress={() => router.replace("/")}>
-          <Text style={styles.backBtn}>📚 手帳一覧に戻る</Text>
+        <Text style={styles.missingText}>この手帳は見つかりませんでした</Text>
+        <Pressable onPress={() => router.replace("/")} accessibilityRole="button">
+          <Text style={styles.backText}>📚 手帳一覧に戻る</Text>
         </Pressable>
       </View>
     );
   }
 
   const isNoteStyle = notebook.type === "notestyle";
-  const rand = (max: number) => Math.random() * Math.max(0, max);
-  const stickerPos = () => ({ x: Math.round(30 + rand(boardWidth - 90)), y: Math.round(40 + rand(140)) });
-  const shapePos = () => ({ x: Math.round(16 + rand(Math.max(40, boardWidth - 160))), y: Math.round(16 + rand(160)) });
+
+  // 「だいたいこのへん」に置く。毎回きっちり同じ場所だと重なって見えないため。
+  const stickerPos = () => ({
+    x: Math.round(randomBetween(30, Math.max(40, boardWidth - 60))),
+    y: Math.round(randomBetween(40, 180)),
+  });
+  const shapePos = () => ({
+    x: Math.round(randomBetween(16, Math.max(56, boardWidth - 160))),
+    y: Math.round(randomBetween(16, 176)),
+  });
 
   const onBoardLayout = (e: LayoutChangeEvent) => setBoardWidth(e.nativeEvent.layout.width);
 
   const onAddSticker = (type: StickerType) => {
     const p = stickerPos();
     addSticker(type, p.x, p.y);
+    tapFeedback();
   };
+
   const onAddText = () => {
     const p = shapePos();
-    addShape(p.x, p.y);
+    const newId = addShape(p.x, p.y);
+    select(newId);
+    useUi.getState().setFocus(newId);
   };
+
   const onAddPhoto = async () => {
     const targetNotebook = notebook.id;
     const targetPage = page.id;
@@ -106,23 +128,27 @@ export default function NotebookEditor() {
       const dataUrl = await pickPhotoAsDataUrl();
       if (!dataUrl) return;
       addPhotoTo(targetNotebook, targetPage, dataUrl, p.x, p.y);
+      tapFeedback();
     } catch {
       showToast("⚠️ 写真の読み込みに失敗しました");
     }
   };
+
   const onToggleConnect = () => {
     const willEnable = !connectMode;
     toggleConnectMode();
     if (willEnable) showToast("🔗 つなぎたいテキストを2つ順にタップしてね");
   };
+
   const onUndo = () => {
-    const ok = undo();
+    const ok = useNotebooks.getState().undo();
     useUi.getState().resetBoardUi();
     showToast(ok ? "↩️ ひとつ前に戻しました" : "⚠️ まだ保存中で戻せません…もう一度どうぞ");
   };
+
   const onScreenshot = async () => {
     select(null);
-    await new Promise((r) => setTimeout(r, 70));
+    await new Promise((r) => setTimeout(r, CAPTURE_SETTLE_MS));
     try {
       await captureAndShare(boardRef, page.title || "techo");
       showToast("画像を保存しました📸");
@@ -130,6 +156,7 @@ export default function NotebookEditor() {
       showToast("スクショに失敗しました…💦");
     }
   };
+
   const onExport = async () => {
     try {
       await exportBackup(useNotebooks.getState().doc);
@@ -138,28 +165,53 @@ export default function NotebookEditor() {
       showToast("書き出しに失敗しました…");
     }
   };
+
   const onReset = () => {
-    Alert.alert("ページを消去", "このページの中身を全部消します。よろしいですか？", [
-      { text: "やめる", style: "cancel" },
-      {
-        text: "消去",
-        style: "destructive",
-        onPress: () => {
-          resetPage();
-          useUi.getState().resetBoardUi();
+    Alert.alert(
+      "ページを消去",
+      `「${pageDisplayTitle(page)}」の中身を全部消します。消したあとでも「元に戻す」で戻せます。`,
+      [
+        { text: "やめる", style: "cancel" },
+        {
+          text: "消去",
+          style: "destructive",
+          onPress: () => {
+            resetPage();
+            useUi.getState().resetBoardUi();
+            showToast("ページを空にしました。元に戻せます🗑️");
+          },
         },
-      },
-    ]);
+      ],
+    );
   };
+
+  const onDuplicatePage = (pageId: string) => {
+    if (!duplicatePage(pageId)) return;
+    tapFeedback();
+    showToast("ページをコピーしたよ📄✨");
+  };
+
   const onDeletePage = (pageId: string) => {
     if (notebook.pages.length <= 1) {
       showToast("最後のページは消せません🌸");
       return;
     }
-    Alert.alert("ページを削除", "このページを削除します。中身も全部消えます。よろしいですか？", [
-      { text: "やめる", style: "cancel" },
-      { text: "削除", style: "destructive", onPress: () => deletePage(pageId) },
-    ]);
+    const target = notebook.pages.find((p) => p.id === pageId);
+    Alert.alert(
+      "ページを削除",
+      `「${target ? pageDisplayTitle(target) : "このページ"}」を中身ごと削除します。消したあとでも「元に戻す」で戻せます。`,
+      [
+        { text: "やめる", style: "cancel" },
+        {
+          text: "削除",
+          style: "destructive",
+          onPress: () => {
+            deletePage(pageId);
+            showToast("ページを削除しました。元に戻せます🗑️");
+          },
+        },
+      ],
+    );
   };
 
   return (
@@ -167,22 +219,34 @@ export default function NotebookEditor() {
       <ScrollView
         contentContainerStyle={[
           styles.content,
-          { paddingTop: insets.top + 10, paddingBottom: TRAY_BASE_HEIGHT + insets.bottom + 40 },
+          { paddingTop: insets.top + space.sm, paddingBottom: TRAY_BASE_HEIGHT + insets.bottom + 40 },
         ]}
         keyboardShouldPersistTaps="handled"
       >
-        <Pressable onPress={goBack} style={styles.back} hitSlop={6}>
-          <Text style={[styles.backBtn, isNoteStyle && styles.backBtnChic]}>📚 手帳一覧に戻る</Text>
-        </Pressable>
+        <View style={styles.topRow}>
+          <Pressable onPress={goBack} style={styles.back} hitSlop={8} accessibilityRole="button">
+            <Text style={[styles.backText, isNoteStyle && styles.backTextChic]}>📚 一覧</Text>
+          </Pressable>
+          <Text style={[styles.notebookName, isNoteStyle && styles.notebookNameChic]} numberOfLines={1}>
+            {notebookDisplayName(notebook)}
+          </Text>
+        </View>
 
-        <BoardTabs notebook={notebook} onSelect={setActivePage} onDelete={onDeletePage} onAddPage={addPage} />
+        <BoardTabs
+          notebook={notebook}
+          onSelect={setActivePage}
+          onDuplicate={onDuplicatePage}
+          onDelete={onDeletePage}
+          onAddPage={addPage}
+        />
 
         <TextInput
           value={page.title}
           onChangeText={setPageTitle}
           placeholder="✏️ このページのタイトル"
-          placeholderTextColor="rgba(90,77,112,0.4)"
-          maxLength={40}
+          placeholderTextColor={colors.placeholder}
+          maxLength={MAX_PAGE_TITLE}
+          accessibilityLabel="ページのタイトル"
           style={[styles.titleInput, isNoteStyle && styles.titleInputChic]}
         />
 
@@ -215,9 +279,13 @@ export default function NotebookEditor() {
         </View>
       </ScrollView>
 
-      {}
       {!storageOk ? (
-        <Pressable style={[styles.saveWarn, { top: insets.top + 6 }]} onPress={onExport}>
+        <Pressable
+          style={[styles.saveWarn, { top: insets.top + 6 }]}
+          onPress={onExport}
+          accessibilityRole="button"
+          accessibilityLabel="保存できていません。タップしてバックアップを書き出す"
+        >
           <Text style={styles.saveWarnText}>⚠️ 保存できていません。タップして「💾書き出し」でバックアップを</Text>
         </Pressable>
       ) : null}
@@ -227,7 +295,6 @@ export default function NotebookEditor() {
         sparkleOn={page.sparkleOn}
         canUndo={canUndo}
         connectMode={connectMode}
-        chic={isNoteStyle}
         onAddSticker={onAddSticker}
         onAddText={onAddText}
         onAddPhoto={onAddPhoto}
@@ -245,87 +312,102 @@ export default function NotebookEditor() {
 
 const styles = StyleSheet.create({
   content: {
-    paddingHorizontal: 14,
+    paddingHorizontal: space.md + 2,
     maxWidth: 620,
     width: "100%",
     alignSelf: "center",
   },
-  back: {
-    alignSelf: "center",
-    paddingVertical: 6,
+  topRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.sm,
+    paddingVertical: space.xs,
   },
-  backBtn: {
-    fontFamily: fonts.body,
-    fontSize: 12,
+  back: {
+    paddingVertical: space.xs,
+    paddingRight: space.xs,
+  },
+  backText: {
+    ...text.label,
     color: colors.plum,
   },
-  backBtnChic: {
-    color: "#777",
+  backTextChic: {
+    color: chic.inkSoft,
+  },
+  notebookName: {
+    flex: 1,
+    ...text.caption,
+    color: colors.plum,
+    opacity: 0.7,
+    textAlign: "right",
+  },
+  notebookNameChic: {
+    color: chic.inkSoft,
   },
   titleInput: {
     alignSelf: "center",
     width: "92%",
     textAlign: "center",
+    // TextInput は lineHeight を指定するとAndroidで縦位置がずれやすいので、
+    // ここだけは字面サイズだけを指定する。
     fontFamily: fonts.display,
-    fontSize: 19,
+    fontSize: 20,
     color: colors.ink,
-    backgroundColor: "rgba(255,255,255,0.55)",
+    backgroundColor: colors.veil,
     borderBottomWidth: 2,
-    borderBottomColor: "rgba(155,130,180,0.4)",
+    borderBottomColor: colors.dashed,
     borderStyle: "dashed",
     borderRadius: 8,
     paddingVertical: 6,
-    paddingHorizontal: 10,
-    marginTop: 8,
+    paddingHorizontal: space.sm,
+    marginTop: space.sm,
     marginBottom: 6,
   },
   titleInputChic: {
     fontFamily: fonts.body,
     fontSize: 16,
-    color: "#333",
+    color: chic.ink,
     backgroundColor: "transparent",
-    borderBottomColor: "#ccc",
+    borderBottomColor: "#CCCCCC",
   },
   controls: {
-    marginTop: 10,
-    paddingHorizontal: 4,
+    marginTop: space.sm,
+    paddingHorizontal: space.xs,
   },
   capture: {
-    marginTop: 4,
+    marginTop: space.xs,
   },
   notestyleBoard: {
     borderRadius: 8,
-    padding: 12,
+    padding: space.md,
     minHeight: 320,
     overflow: "hidden",
-    boxShadow: "0 1px 4px rgba(0,0,0,0.08)",
+    boxShadow: shadows.chicBoard,
   },
   missing: {
     flex: 1,
     alignItems: "center",
-    gap: 16,
+    gap: space.lg,
   },
   missingText: {
-    fontFamily: fonts.body,
-    fontSize: 14,
+    ...text.bodyL,
     color: colors.ink,
   },
   saveWarn: {
     position: "absolute",
-    left: 12,
-    right: 12,
-    backgroundColor: "#fff3e0",
+    left: space.md,
+    right: space.md,
+    backgroundColor: colors.warnBg,
     borderWidth: 1.5,
-    borderColor: "#f0b86e",
-    borderRadius: 12,
-    paddingVertical: 8,
-    paddingHorizontal: 12,
+    borderColor: colors.warnBorder,
+    borderRadius: radii.small,
+    paddingVertical: space.sm,
+    paddingHorizontal: space.md,
     zIndex: 50,
   },
   saveWarnText: {
-    fontFamily: fonts.body,
-    fontSize: 12,
-    color: "#7a4a12",
+    ...text.label,
+    color: colors.warnInk,
     textAlign: "center",
   },
 });

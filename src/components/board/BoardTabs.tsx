@@ -1,16 +1,24 @@
-import { Pressable, ScrollView, StyleSheet, Text } from "react-native";
-import { colors, fonts } from "@/lib/theme";
+import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { pageDisplayTitle } from "@/lib/model";
-import type { Notebook, PageType } from "@/lib/types";
+import { chic as chicTheme, colors, radii, shadows, space, text } from "@/lib/theme";
+import type { Notebook, Page, PageType } from "@/lib/types";
+import { IconButton } from "@/components/ui/kit";
+
+function tabIcon(notebook: Notebook, page: Page): string {
+  if (notebook.type === "notestyle") return "📄";
+  return page.type === "notebook" ? "📖" : "📋";
+}
 
 export function BoardTabs({
   notebook,
   onSelect,
+  onDuplicate,
   onDelete,
   onAddPage,
 }: {
   notebook: Notebook;
   onSelect: (id: string) => void;
+  onDuplicate: (id: string) => void;
   onDelete: (id: string) => void;
   onAddPage: (type: PageType) => void;
 }) {
@@ -25,31 +33,81 @@ export function BoardTabs({
     >
       {notebook.pages.map((p) => {
         const active = p.id === notebook.activePageId;
-        const icon = isNoteStyle ? "📄" : p.type === "notebook" ? "📖" : "📋";
+        const title = pageDisplayTitle(p);
         return (
-          <Pressable key={p.id} style={[styles.tab, active && styles.tabActive]} onPress={() => onSelect(p.id)}>
-            <Text style={[styles.tabText, active && styles.tabTextActive]} numberOfLines={1}>
-              {icon} {pageDisplayTitle(p)}
-            </Text>
-            {active ? (
-              <Pressable style={styles.tabDel} onPress={() => onDelete(p.id)} hitSlop={8}>
-                <Text style={styles.tabDelText}>✕</Text>
-              </Pressable>
+          // タブの外枠は押せない容れ物にして、ページ切り替えとコピー・削除を
+          // 兄弟に並べる。押せる要素を入れ子にすると TalkBack が外側だけを
+          // ひとかたまりで拾い、中のボタンに降りられなくなるため。
+          <View
+            key={p.id}
+            style={[
+              styles.tab,
+              isNoteStyle ? styles.tabChic : null,
+              active ? (isNoteStyle ? styles.tabChicActive : styles.tabActive) : null,
+            ]}
+          >
+            {/* 見出しインデックスの「つまみ」。開いているページだけ色が乗る */}
+            {active && !isNoteStyle ? (
+              <View style={[styles.tabMark, { backgroundColor: notebook.color }]} pointerEvents="none" />
             ) : null}
-          </Pressable>
+
+            <Pressable
+              style={styles.tabLabel}
+              onPress={() => onSelect(p.id)}
+              accessibilityRole="tab"
+              accessibilityState={{ selected: active }}
+              accessibilityLabel={`${title}のページ`}
+            >
+              <Text
+                style={[
+                  styles.tabText,
+                  isNoteStyle ? styles.tabTextChic : null,
+                  active ? styles.tabTextActive : null,
+                  active && isNoteStyle ? styles.tabTextChicActive : null,
+                ]}
+                numberOfLines={1}
+              >
+                {tabIcon(notebook, p)} {title}
+              </Text>
+            </Pressable>
+
+            {active ? (
+              <View style={styles.tabActions}>
+                <IconButton
+                  icon="📄"
+                  label={`${title}をコピー`}
+                  size={22}
+                  tone="plain"
+                  onPress={() => onDuplicate(p.id)}
+                />
+                <IconButton
+                  icon="✕"
+                  label={`${title}を削除`}
+                  size={22}
+                  tone={isNoteStyle ? "plain" : "rose"}
+                  {...(isNoteStyle ? { tint: chicTheme.inkSoft } : {})}
+                  onPress={() => onDelete(p.id)}
+                />
+              </View>
+            ) : null}
+          </View>
         );
       })}
 
       {isNoteStyle ? (
-        <Pressable style={styles.addTab} onPress={() => onAddPage("flowchart")}>
-          <Text style={styles.addText}>＋ ページを追加</Text>
+        <Pressable
+          style={[styles.addTab, styles.addTabChic]}
+          onPress={() => onAddPage("flowchart")}
+          accessibilityRole="button"
+        >
+          <Text style={[styles.addText, styles.addTextChic]}>＋ ページを追加</Text>
         </Pressable>
       ) : (
         <>
-          <Pressable style={styles.addTab} onPress={() => onAddPage("flowchart")}>
+          <Pressable style={styles.addTab} onPress={() => onAddPage("flowchart")} accessibilityRole="button">
             <Text style={styles.addText}>＋📋 工程</Text>
           </Pressable>
-          <Pressable style={styles.addTab} onPress={() => onAddPage("notebook")}>
+          <Pressable style={styles.addTab} onPress={() => onAddPage("notebook")} accessibilityRole="button">
             <Text style={styles.addText}>＋📖 自由帳</Text>
           </Pressable>
         </>
@@ -60,61 +118,108 @@ export function BoardTabs({
 
 const styles = StyleSheet.create({
   row: {
-    gap: 8,
-    paddingHorizontal: 4,
-    paddingVertical: 10,
-    alignItems: "center",
+    gap: space.sm,
+    paddingHorizontal: space.xs,
+    paddingTop: space.md,
+    paddingBottom: space.xs,
+    alignItems: "flex-end",
   },
   tab: {
-    maxWidth: 170,
-    paddingVertical: 7,
-    paddingHorizontal: 14,
-    borderRadius: 14,
-    backgroundColor: colors.panelSoft,
+    maxWidth: 230,
+    minHeight: 34,
+    paddingRight: space.sm,
+    borderTopLeftRadius: 14,
+    borderTopRightRadius: 14,
+    borderBottomLeftRadius: 4,
+    borderBottomRightRadius: 4,
+    backgroundColor: colors.veilWeak,
     borderWidth: 1.5,
     borderColor: "transparent",
     flexDirection: "row",
     alignItems: "center",
+    overflow: "hidden",
   },
   tabActive: {
     backgroundColor: colors.white,
     borderColor: colors.lavender,
-    boxShadow: "0 2px 8px rgba(155,130,180,0.2)",
+    paddingTop: 3,
+    boxShadow: shadows.chip,
+  },
+  // ページ切り替えの当たり判定。文字のまわり全部を押せるようにする。
+  tabLabel: {
+    flexShrink: 1,
+    paddingVertical: 7,
+    paddingLeft: space.md,
+    paddingRight: 6,
+  },
+  // 開いているページの上端に走る色帯＝インデックスのつまみ。
+  tabMark: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    top: 0,
+    height: 4,
+  },
+  tabChic: {
+    backgroundColor: "transparent",
+    // React Native では borderRadius より個別の角指定が優先されるので、
+    // 平らにしたいときは4隅ぶんを明示的に 0 にする。
+    borderTopLeftRadius: 0,
+    borderTopRightRadius: 0,
+    borderBottomLeftRadius: 0,
+    borderBottomRightRadius: 0,
+    borderWidth: 0,
+    borderBottomWidth: 2,
+    borderBottomColor: "transparent",
+    paddingRight: space.xs,
+  },
+  tabChicActive: {
+    borderBottomColor: chicTheme.rule,
   },
   tabText: {
-    fontFamily: fonts.body,
-    fontSize: 12,
+    ...text.label,
     color: colors.ink,
+    flexShrink: 1,
   },
   tabTextActive: {
-    fontFamily: fonts.bodyBold,
+    ...text.labelBold,
+    color: colors.ink,
   },
-  tabDel: {
-    marginLeft: 8,
-    width: 18,
-    height: 18,
-    borderRadius: 9,
-    backgroundColor: colors.rose,
+  tabTextChic: {
+    color: chicTheme.inkSoft,
+  },
+  tabTextChicActive: {
+    color: "#222222",
+  },
+  tabActions: {
+    flexDirection: "row",
     alignItems: "center",
-    justifyContent: "center",
-  },
-  tabDelText: {
-    color: colors.white,
-    fontSize: 10,
-    lineHeight: 12,
+    gap: 2,
+    marginLeft: space.xs,
   },
   addTab: {
+    minHeight: 34,
+    justifyContent: "center",
     paddingVertical: 7,
     paddingHorizontal: 13,
     borderRadius: 14,
     borderWidth: 1.5,
-    borderColor: "rgba(155,130,180,0.5)",
+    borderColor: colors.dashedStrong,
     borderStyle: "dashed",
-    backgroundColor: "rgba(255,255,255,0.3)",
+    backgroundColor: colors.veilWeak,
+  },
+  addTabChic: {
+    borderStyle: "solid",
+    borderWidth: 1,
+    borderColor: "#CCCCCC",
+    backgroundColor: chicTheme.card,
+    borderRadius: radii.tiny,
   },
   addText: {
-    fontFamily: fonts.bodyBold,
-    fontSize: 12,
-    color: "#9b7fb8",
+    ...text.labelBold,
+    color: colors.lavenderDeep,
+  },
+  addTextChic: {
+    color: chicTheme.inkSoft,
   },
 });

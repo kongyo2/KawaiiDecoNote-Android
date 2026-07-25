@@ -1,19 +1,26 @@
+import Constants from "expo-constants";
 import * as DocumentPicker from "expo-document-picker";
 import * as Sharing from "expo-sharing";
-import { writeTextFile, readTextFile } from "./files";
-import { todayStamp } from "./format";
-import { normalizeState } from "./model";
+import { buildBackup, parseBackup } from "./backupFormat";
+import type { BackupRejection } from "./backupFormat";
+import { readTextFile, writeTextFile } from "./files";
+import { fileStamp } from "./format";
 import type { AppState } from "./types";
 
+function appVersion(): string {
+  return Constants.expoConfig?.version ?? "unknown";
+}
+
 export async function exportBackup(state: AppState): Promise<void> {
-  const json = JSON.stringify(state, null, 2);
-  const uri = writeTextFile(`kawaii-techo-backup-${todayStamp()}.json`, json);
+  const json = JSON.stringify(buildBackup(state, appVersion(), new Date().toISOString()), null, 2);
+  const uri = writeTextFile(`kawaii-techo-backup-${fileStamp()}.json`, json);
   if (await Sharing.isAvailableAsync()) {
     await Sharing.shareAsync(uri, { mimeType: "application/json", dialogTitle: "バックアップを保存" });
   }
 }
 
-export type ImportResult = { status: "picked"; state: AppState } | { status: "canceled" } | { status: "invalid" };
+export type ImportResult =
+  { status: "picked"; state: AppState } | { status: "canceled" } | { status: "rejected"; reason: BackupRejection };
 
 export async function pickBackup(): Promise<ImportResult> {
   const result = await DocumentPicker.getDocumentAsync({
@@ -28,12 +35,8 @@ export async function pickBackup(): Promise<ImportResult> {
   try {
     parsed = JSON.parse(readTextFile(asset.uri));
   } catch {
-    return { status: "invalid" };
+    return { status: "rejected", reason: "notBackup" };
   }
-  if (!parsed || typeof parsed !== "object" || !Array.isArray((parsed as { notebooks?: unknown }).notebooks)) {
-    return { status: "invalid" };
-  }
-  const state = normalizeState(parsed);
-  if (state.notebooks.length === 0) return { status: "invalid" };
-  return { status: "picked", state };
+  const decoded = parseBackup(parsed);
+  return decoded.ok ? { status: "picked", state: decoded.state } : { status: "rejected", reason: decoded.reason };
 }

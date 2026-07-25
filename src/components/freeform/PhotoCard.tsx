@@ -1,13 +1,12 @@
 import { useEffect, useState } from "react";
 import { Image, StyleSheet } from "react-native";
 import type { LayoutChangeEvent } from "react-native";
+import { chic, radii, shadows } from "@/lib/theme";
 import { useNotebooks } from "@/state/notebooks";
 import { PHOTO_MAX_WIDTH, PHOTO_MIN_WIDTH } from "@/lib/types";
 import type { Photo } from "@/lib/types";
 import { Transformable } from "@/components/transform/Transformable";
 import type { TransformPatch } from "@/components/transform/Transformable";
-
-const CHIC_HANDLE = "#555";
 
 export function PhotoCard({
   photo,
@@ -52,8 +51,10 @@ export function PhotoCard({
       maxW={PHOTO_MAX_WIDTH}
       selected={selected}
       bodyDraggable
-      handleTint={CHIC_HANDLE}
+      handleTint={chic.handle}
       boundsWidth={boundsWidth}
+      label="写真"
+      deleteLabel="この写真をはがす"
       onSelect={onSelect}
       onChange={onChange}
       onDelete={() => deletePhoto(photo.id)}
@@ -62,6 +63,7 @@ export function PhotoCard({
         source={{ uri: photo.dataUrl }}
         style={[styles.img, { aspectRatio: ratio }]}
         resizeMode="cover"
+        accessibilityIgnoresInvertColors
         onLayout={(e: LayoutChangeEvent) => onMeasureHeight(photo.id, e.nativeEvent.layout.height)}
       />
     </Transformable>
@@ -72,7 +74,7 @@ const styles = StyleSheet.create({
   img: {
     width: "100%",
     height: undefined,
-    borderRadius: 10,
-    boxShadow: "0 1px 6px rgba(0,0,0,0.14)",
+    borderRadius: radii.small,
+    boxShadow: shadows.chicCard,
   },
 });

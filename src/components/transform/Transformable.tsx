@@ -3,13 +3,19 @@ import { useEffect } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import Animated, { measure, runOnJS, useAnimatedRef, useAnimatedStyle, useSharedValue } from "react-native-reanimated";
-import { colors } from "@/lib/theme";
+import { colors, shadows } from "@/lib/theme";
 
 export interface TransformPatch {
   x?: number;
   y?: number;
   w?: number;
   rot?: number;
+}
+
+interface SecondaryAction {
+  icon: string;
+  label: string;
+  onPress: () => void;
 }
 
 interface TransformableProps {
@@ -28,6 +34,17 @@ interface TransformableProps {
   handleTint?: string;
   boundsWidth?: number | undefined;
   minY?: number;
+  // 位置と幅をキャンバスの内側へ丸めるか。回転した矢印のように「箱の左上」が
+  // 画面上の位置と一致しない要素は false にする（丸めると線が縮んで
+  // 図形どうしをつながなくなる）。
+  bounded?: boolean;
+  // 読み上げ用の名前。「シール」「テキスト」など、何を掴んでいるかを伝える。
+  label?: string;
+  // 中身をひとかたまりの読み上げ要素にまとめるか。編集できるテキストを含む
+  // 要素で true にすると、TalkBack が入力欄に降りられなくなるので false にする。
+  bodyAccessible?: boolean;
+  deleteLabel?: string;
+  secondaryAction?: SecondaryAction;
   onSelect: () => void;
   onChange: (patch: TransformPatch) => void;
   onDelete?: () => void;
@@ -36,6 +53,7 @@ interface TransformableProps {
 
 const HANDLE = 26;
 
+// つまみ（⠿）を上にはみ出させる分だけ、上端に確保しておく余白。
 export const GRIP_RESERVE = 15;
 
 function tintWithAlpha(hex: string): string {
@@ -60,6 +78,11 @@ export function Transformable({
   handleTint = colors.plum,
   boundsWidth,
   minY = 0,
+  bounded = true,
+  label,
+  bodyAccessible = true,
+  deleteLabel = "削除",
+  secondaryAction,
   onSelect,
   onChange,
   onDelete,
@@ -79,13 +102,14 @@ export function Transformable({
   const startAngle = useSharedValue(0);
 
   useEffect(() => {
-    const clampedW = boundsWidth !== undefined ? Math.max(minW, Math.min(w, boundsWidth)) : w;
-    const maxX = boundsWidth !== undefined ? Math.max(0, boundsWidth - clampedW) : Number.POSITIVE_INFINITY;
-    posX.value = Math.min(maxX, Math.max(0, x));
-    posY.value = Math.max(minY, y);
+    const clampable = bounded && boundsWidth !== undefined;
+    const clampedW = clampable ? Math.max(minW, Math.min(w, boundsWidth)) : w;
+    const maxX = clampable ? Math.max(0, boundsWidth - clampedW) : Number.POSITIVE_INFINITY;
+    posX.value = bounded ? Math.min(maxX, Math.max(0, x)) : x;
+    posY.value = bounded ? Math.max(minY, y) : y;
     sw.value = clampedW;
     srot.value = rot;
-  }, [x, y, w, rot, boundsWidth, minW, minY, posX, posY, sw, srot]);
+  }, [x, y, w, rot, bounded, boundsWidth, minW, minY, posX, posY, sw, srot]);
 
   const animStyle = useAnimatedStyle(() => ({
     transform: [{ translateX: posX.value }, { translateY: posY.value }, { rotate: `${srot.value}deg` }],
@@ -100,9 +124,16 @@ export function Transformable({
       startY.value = posY.value;
     })
     .onUpdate((e) => {
+      const nextX = startX.value + e.translationX;
+      const nextY = startY.value + e.translationY;
+      if (!bounded) {
+        posX.value = nextX;
+        posY.value = nextY;
+        return;
+      }
       const maxX = boundsWidth !== undefined ? Math.max(0, boundsWidth - sw.value) : 1e6;
-      posX.value = Math.min(maxX, Math.max(0, startX.value + e.translationX));
-      posY.value = Math.max(minY, startY.value + e.translationY);
+      posX.value = Math.min(maxX, Math.max(0, nextX));
+      posY.value = Math.max(minY, nextY);
     })
     .onEnd(() => {
       runOnJS(onChange)({ x: Math.round(posX.value), y: Math.round(posY.value) });
@@ -132,7 +163,7 @@ export function Transformable({
       const cy = m.pageY + m.height / 2;
       const d = Math.hypot(e.absoluteX - cx, e.absoluteY - cy);
       let next = Math.max(minW, Math.min(maxW, Math.round((startW.value * d) / startDist.value)));
-      if (boundsWidth !== undefined) next = Math.min(next, Math.max(minW, boundsWidth - posX.value));
+      if (bounded && boundsWidth !== undefined) next = Math.min(next, Math.max(minW, boundsWidth - posX.value));
       sw.value = next;
     })
     .onEnd(() => {
@@ -163,12 +194,23 @@ export function Transformable({
   return (
     <Animated.View ref={aref} style={[styles.root, selected ? styles.rootSelected : null, animStyle]}>
       <GestureDetector gesture={bodyGesture}>
-        <View style={styles.body}>{children}</View>
+        <View
+          style={styles.body}
+          accessible={bodyAccessible && label !== undefined}
+          accessibilityLabel={label}
+          accessibilityState={{ selected }}
+        >
+          {children}
+        </View>
       </GestureDetector>
 
       {showDragHandle ? (
         <GestureDetector gesture={drag}>
-          <View style={[styles.grip, { backgroundColor: tintWithAlpha(handleTint) }]}>
+          <View
+            style={[styles.grip, { backgroundColor: tintWithAlpha(handleTint) }]}
+            accessible
+            accessibilityLabel={label ? `${label}を動かす` : "動かす"}
+          >
             <Text style={[styles.gripText, { color: handleTint }]}>⠿</Text>
           </View>
         </GestureDetector>
@@ -176,7 +218,11 @@ export function Transformable({
 
       {selected && rotatable ? (
         <GestureDetector gesture={rotate}>
-          <View style={[styles.handle, styles.rotateHandle, { borderColor: handleTint }]}>
+          <View
+            style={[styles.handle, styles.rotateHandle, { borderColor: handleTint }]}
+            accessible
+            accessibilityLabel="ドラッグして回す"
+          >
             <Text style={[styles.handleText, { color: handleTint }]}>↻</Text>
           </View>
         </GestureDetector>
@@ -184,14 +230,36 @@ export function Transformable({
 
       {selected && resizable ? (
         <GestureDetector gesture={resize}>
-          <View style={[styles.handle, styles.resizeHandle, { borderColor: handleTint }]}>
+          <View
+            style={[styles.handle, styles.resizeHandle, { borderColor: handleTint }]}
+            accessible
+            accessibilityLabel="ドラッグして大きさを変える"
+          >
             <Text style={[styles.handleText, { color: handleTint }]}>⤡</Text>
           </View>
         </GestureDetector>
       ) : null}
 
+      {selected && secondaryAction ? (
+        <Pressable
+          style={[styles.secondary, { borderColor: handleTint }]}
+          onPress={secondaryAction.onPress}
+          hitSlop={8}
+          accessibilityRole="button"
+          accessibilityLabel={secondaryAction.label}
+        >
+          <Text style={[styles.secondaryText, { color: handleTint }]}>{secondaryAction.icon}</Text>
+        </Pressable>
+      ) : null}
+
       {selected && onDelete ? (
-        <Pressable style={styles.delete} onPress={onDelete} hitSlop={6}>
+        <Pressable
+          style={styles.delete}
+          onPress={onDelete}
+          hitSlop={8}
+          accessibilityRole="button"
+          accessibilityLabel={deleteLabel}
+        >
           <Text style={styles.deleteText}>✕</Text>
         </Pressable>
       ) : null}
@@ -215,9 +283,9 @@ const styles = StyleSheet.create({
     position: "absolute",
     left: "50%",
     marginLeft: -18,
-    top: -15,
+    top: -GRIP_RESERVE,
     width: 36,
-    height: 15,
+    height: GRIP_RESERVE,
     borderTopLeftRadius: 6,
     borderTopRightRadius: 6,
     alignItems: "center",
@@ -237,7 +305,7 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     alignItems: "center",
     justifyContent: "center",
-    boxShadow: "0 2px 6px rgba(0,0,0,0.25)",
+    boxShadow: shadows.handle,
   },
   rotateHandle: {
     left: -13,
@@ -249,6 +317,25 @@ const styles = StyleSheet.create({
   },
   handleText: {
     fontSize: 13,
+    fontWeight: "700",
+  },
+  // 回転つまみ（左上）・削除（右上）・拡大つまみ（右下）とぶつからない角に置く。
+  secondary: {
+    position: "absolute",
+    bottom: -10,
+    left: -10,
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: colors.white,
+    borderWidth: 1.5,
+    alignItems: "center",
+    justifyContent: "center",
+    zIndex: 5,
+  },
+  secondaryText: {
+    fontSize: 12,
+    lineHeight: 14,
     fontWeight: "700",
   },
   delete: {

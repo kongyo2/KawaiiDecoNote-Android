@@ -1,39 +1,62 @@
 import { useEffect, useMemo } from "react";
 import { StyleSheet, View } from "react-native";
-import Animated, { Easing, useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
+import Animated, {
+  Easing,
+  useAnimatedStyle,
+  useReducedMotion,
+  useSharedValue,
+  withTiming,
+} from "react-native-reanimated";
+import { degrees, randomOf } from "@/lib/format";
 import { StickerShape } from "@/components/ui/StickerShape";
 import { STICKER_TYPES } from "@/lib/types";
 
-function Sprite({ index }: { index: number }) {
+const SPRITES = 6;
+const DURATION = 700;
+
+function Sprite() {
   const p = useSharedValue(0);
-  const target = useMemo(() => {
+  const seed = useMemo(() => {
     const angle = Math.random() * Math.PI * 2;
     const dist = 40 + Math.random() * 40;
-    return { dx: Math.cos(angle) * dist, dy: Math.sin(angle) * dist - 20 };
+    return {
+      dx: Math.cos(angle) * dist,
+      dy: Math.sin(angle) * dist - 20,
+      spin: degrees(Math.random() * Math.PI * 2),
+      type: randomOf(STICKER_TYPES) ?? "star",
+    };
   }, []);
 
   useEffect(() => {
-    p.value = withTiming(1, { duration: 700, easing: Easing.out(Easing.quad) });
+    p.value = withTiming(1, { duration: DURATION, easing: Easing.out(Easing.quad) });
   }, [p]);
 
   const style = useAnimatedStyle(() => ({
     opacity: 1 - p.value,
-    transform: [{ translateX: target.dx * p.value }, { translateY: target.dy * p.value }],
+    transform: [
+      { translateX: seed.dx * p.value },
+      { translateY: seed.dy * p.value },
+      { rotate: `${seed.spin * p.value}deg` },
+    ],
   }));
 
-  const type = STICKER_TYPES[index % STICKER_TYPES.length] ?? "star";
   return (
     <Animated.View style={[styles.sprite, style]} pointerEvents="none">
-      <StickerShape type={type} size={18} />
+      <StickerShape type={seed.type} size={18} />
     </Animated.View>
   );
 }
 
+// 工程にチェックが付いたときにシールが弾ける演出。
+// 「視差効果を減らす」設定が入っている端末では出さない。
 export function Confetti() {
+  const reduced = useReducedMotion();
+  if (reduced) return null;
+
   return (
     <View style={styles.wrap} pointerEvents="none">
-      {Array.from({ length: 6 }, (_, i) => (
-        <Sprite key={i} index={i} />
+      {Array.from({ length: SPRITES }, (_, i) => (
+        <Sprite key={i} />
       ))}
     </View>
   );

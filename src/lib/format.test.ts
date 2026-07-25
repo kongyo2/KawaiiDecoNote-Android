@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { clamp, degrees, fileStamp, pad2, randomOf, todayStamp } from "./format";
+import { clamp, degrees, fileStamp, pad2, randomBetween, randomOf, safeFileName, todayStamp } from "./format";
 
 describe("pad2", () => {
   it("2桁未満はゼロ埋めする", () => {
@@ -79,5 +79,39 @@ describe("degrees", () => {
     expect(degrees(Math.PI)).toBeCloseTo(180);
     expect(degrees(Math.PI / 2)).toBeCloseTo(90);
     expect(degrees(0)).toBe(0);
+  });
+});
+
+describe("randomBetween", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("min 以上 max 未満に収まる", () => {
+    vi.spyOn(Math, "random").mockReturnValue(0);
+    expect(randomBetween(10, 20)).toBe(10);
+    vi.spyOn(Math, "random").mockReturnValue(0.5);
+    expect(randomBetween(10, 20)).toBe(15);
+  });
+
+  it("max が min 以下でも min を返す（幅は負にしない）", () => {
+    vi.spyOn(Math, "random").mockReturnValue(0.9);
+    expect(randomBetween(30, 10)).toBe(30);
+  });
+});
+
+describe("safeFileName", () => {
+  it("ファイル名に使えない文字を _ にする", () => {
+    expect(safeFileName('a/b:c*d?e"f<g>h|i', "techo")).toBe("a_b_c_d_e_f_g_h_i");
+  });
+
+  it("前後の空白は落とす", () => {
+    expect(safeFileName("  ページ  ", "techo")).toBe("ページ");
+  });
+
+  it("空・空白のみ・ドットだけなら fallback", () => {
+    expect(safeFileName("", "techo")).toBe("techo");
+    expect(safeFileName("   ", "techo")).toBe("techo");
+    expect(safeFileName("..", "techo")).toBe("techo");
   });
 });

@@ -1,7 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
   appendToBranch,
-  findStepInTree,
+  copyName,
+  duplicateNotebook,
+  duplicatePage,
+  moveStepInTree,
   newId,
   newIfStep,
   newNotebook,
@@ -14,9 +17,10 @@ import {
   pageDisplayTitle,
   removeStepFromTree,
   seedUid,
+  stepProgress,
   updateStepInTree,
 } from "./model";
-import type { IfStep, NormalStep, Step } from "./types";
+import type { IfStep, NormalStep, Notebook, Page, Step } from "./types";
 
 // --- テスト用の工程ツリー・ビルダー ---
 const plain = (id: string, text = "", done = false): NormalStep => ({ id, type: "step", text, done });
@@ -152,22 +156,7 @@ describe("removeStepFromTree", () => {
     const tree: Step[] = [ifStep("if1", [ifStep("if2", [plain("deep")])], [])];
     const out = removeStepFromTree(tree, "if2");
     expect((out[0] as IfStep).branches.yes).toHaveLength(0);
-    expect(findStepInTree(out, "deep")).toBeUndefined();
-  });
-});
-
-describe("findStepInTree", () => {
-  const tree: Step[] = [plain("a"), ifStep("if1", [plain("y1"), ifStep("if2", [plain("deep")])], [plain("n1")])];
-
-  it("トップレベル・ネスト・深いネストいずれも見つける", () => {
-    expect(findStepInTree(tree, "a")?.id).toBe("a");
-    expect(findStepInTree(tree, "y1")?.id).toBe("y1");
-    expect(findStepInTree(tree, "n1")?.id).toBe("n1");
-    expect(findStepInTree(tree, "deep")?.id).toBe("deep");
-  });
-
-  it("見つからなければ undefined", () => {
-    expect(findStepInTree(tree, "missing")).toBeUndefined();
+    expect(JSON.stringify(out)).not.toContain("deep");
   });
 });
 
@@ -334,17 +323,18 @@ describe("normalizeNotebook", () => {
     expect(normalizeNotebook({ id: "nb1", pages: [] })).toBeNull();
   });
 
-  it("旧 rollbahn タイプは notestyle に移行する", () => {
+  // Web版だけが書き出していた旧タイプ名は、互換を打ち切ったので既定値に落ちる。
+  it("知らない type は profile に落とす", () => {
     const nb = normalizeNotebook({
       id: "nb1",
       type: "rollbahn",
       activePageId: "pg1",
       pages: [{ id: "pg1", steps: [] }],
     });
-    expect(nb?.type).toBe("notestyle");
+    expect(nb?.type).toBe("profile");
   });
 
-  it("notestyle では note をシェイプへ移し note を空にする", () => {
+  it("notestyle でも note はそのまま残す（シェイプへは動かさない）", () => {
     const nb = normalizeNotebook({
       id: "nb1",
       type: "notestyle",
@@ -352,8 +342,8 @@ describe("normalizeNotebook", () => {
       pages: [{ id: "pg1", type: "notebook", note: "メモ本文", shapes: [] }],
     });
     const page = nb?.pages[0];
-    expect(page?.note).toBe("");
-    expect(page?.shapes.some((s) => s.text === "メモ本文")).toBe(true);
+    expect(page?.note).toBe("メモ本文");
+    expect(page?.shapes).toHaveLength(0);
   });
 
   it("activePageId が無効なら先頭ページに合わせる", () => {
@@ -376,7 +366,7 @@ describe("normalizePage", () => {
     expect(p.type).toBe("flowchart");
     expect(p.frame).toBe("aurora");
     expect(p.ruleStyle).toBe("lines");
-    expect(p.paperColor).toBe("#FBF7F2");
+    expect(p.paperColor).toBe("#FFFFFF");
     expect(p.steps).toEqual([]);
   });
 
@@ -432,12 +422,12 @@ describe("正規化の細部（クランプ・フォールバック・矢印）"
     expect(p.shapes[1]?.w).toBe(80);
   });
 
-  it("写真の dataUrl は image フィールドからも拾う", () => {
+  // Web版だけが使っていた image フィールドは、互換を打ち切ったので読まない。
+  it("dataUrl が無い写真は捨てる（image フィールドは見ない）", () => {
     const p = normalizePage({
       photos: [{ id: "ph1", x: 0, y: 0, w: 140, rot: 0, image: "data:image/jpeg;base64,BBBB" }],
     });
-    expect(p.photos).toHaveLength(1);
-    expect(p.photos[0]?.dataUrl).toBe("data:image/jpeg;base64,BBBB");
+    expect(p.photos).toHaveLength(0);
   });
 
   it("frame / ruleStyle / type が不正なら既定値に落とす", () => {
@@ -445,7 +435,7 @@ describe("正規化の細部（クランプ・フォールバック・矢印）"
     expect(p.type).toBe("flowchart");
     expect(p.frame).toBe("aurora");
     expect(p.ruleStyle).toBe("lines");
-    expect(p.paperColor).toBe("#FBF7F2");
+    expect(p.paperColor).toBe("#FFFFFF");
   });
 
   it("手動矢印は範囲内なら保持し、範囲外なら自動に戻す", () => {
@@ -621,6 +611,177 @@ describe("id 採番と全要素の走査", () => {
     expect(pg?.stickers).toHaveLength(1);
     expect(pg?.arrows).toHaveLength(1);
     expect((steps[0] as IfStep).branches.no.map((s) => s.id)).toEqual(["n1"]);
+  });
+});
+
+describe("moveStepInTree", () => {
+  it("トップレベルの工程を前後に動かす", () => {
+    const tree: Step[] = [plain("a"), plain("b"), plain("c")];
+    expect(moveStepInTree(tree, "b", -1).map((s) => s.id)).toEqual(["b", "a", "c"]);
+    expect(moveStepInTree(tree, "b", 1).map((s) => s.id)).toEqual(["a", "c", "b"]);
+  });
+
+  it("端では動かさない", () => {
+    const tree: Step[] = [plain("a"), plain("b")];
+    expect(moveStepInTree(tree, "a", -1).map((s) => s.id)).toEqual(["a", "b"]);
+    expect(moveStepInTree(tree, "b", 1).map((s) => s.id)).toEqual(["a", "b"]);
+  });
+
+  it("分岐の中でも同じ並びの中だけで動く", () => {
+    const tree: Step[] = [ifStep("if1", [plain("y1"), plain("y2"), plain("y3")], [plain("n1")])];
+    const out = moveStepInTree(tree, "y3", -1);
+    const top = out[0] as IfStep;
+    expect(top.branches.yes.map((s) => s.id)).toEqual(["y1", "y3", "y2"]);
+    expect(top.branches.no.map((s) => s.id)).toEqual(["n1"]);
+  });
+
+  it("入れ子の if カード自体も並べ替えられる", () => {
+    const tree: Step[] = [ifStep("if1", [plain("y1"), ifStep("if2")], [])];
+    const out = moveStepInTree(tree, "if2", -1);
+    expect((out[0] as IfStep).branches.yes.map((s) => s.id)).toEqual(["if2", "y1"]);
+  });
+
+  it("見つからない id なら何も変わらない", () => {
+    const tree: Step[] = [plain("a"), ifStep("if1", [plain("y1")])];
+    expect(moveStepInTree(tree, "zzz", 1).map((s) => s.id)).toEqual(["a", "if1"]);
+  });
+});
+
+describe("copyName", () => {
+  it("「〜のコピー」を付ける", () => {
+    expect(copyName("メモ帳", 30)).toBe("メモ帳のコピー");
+  });
+
+  it("上限を超えるときは元の名前を詰める", () => {
+    const long = "あ".repeat(30);
+    const out = copyName(long, 30);
+    expect(out).toHaveLength(30);
+    expect(out.endsWith("のコピー")).toBe(true);
+  });
+
+  it("上限が接尾辞より短くても接尾辞は残す", () => {
+    expect(copyName("あいうえお", 2)).toBe("のコピー");
+  });
+});
+
+describe("duplicatePage", () => {
+  const source = (): Page => ({
+    ...newPage("flowchart", "元ページ"),
+    steps: [plain("s1", "工程"), ifStep("if1", [plain("y1")], [])],
+    stickers: [{ id: "st1", type: "star", x: 1, y: 2, rot: 3, size: 44 }],
+    shapes: [
+      { id: "sh1", text: "A", x: 0, y: 0, w: 150, rot: 0 },
+      { id: "sh2", text: "B", x: 10, y: 10, w: 150, rot: 0 },
+    ],
+    photos: [{ id: "ph1", x: 0, y: 0, w: 140, rot: 0, dataUrl: "data:image/png;base64,AAAA" }],
+    arrows: [{ id: "ar1", from: "sh1", to: "sh2", manual: false, mx: 0, my: 0, length: 0, angle: 0 }],
+  });
+
+  it("中身は保ちつつ、id はすべて振り直す", () => {
+    const original = source();
+    const copy = duplicatePage(original);
+    expect(copy.id).not.toBe(original.id);
+    expect(copy.steps[0]?.id).not.toBe("s1");
+    expect((copy.steps[0] as NormalStep).text).toBe("工程");
+    expect(copy.stickers[0]?.id).not.toBe("st1");
+    expect(copy.shapes.map((s) => s.text)).toEqual(["A", "B"]);
+    expect(copy.shapes[0]?.id).not.toBe("sh1");
+    expect(copy.photos[0]?.dataUrl).toBe("data:image/png;base64,AAAA");
+  });
+
+  it("ネストした分岐の工程まで振り直す", () => {
+    const copy = duplicatePage(source());
+    const branch = (copy.steps[1] as IfStep).branches.yes[0];
+    expect(branch?.id).not.toBe("y1");
+    expect((copy.steps[1] as IfStep).id).not.toBe("if1");
+  });
+
+  it("矢印は新しいシェイプ id へつなぎ直す", () => {
+    const copy = duplicatePage(source());
+    const arrow = copy.arrows[0];
+    expect(arrow?.from).toBe(copy.shapes[0]?.id);
+    expect(arrow?.to).toBe(copy.shapes[1]?.id);
+  });
+
+  it("参照先を失った矢印は落とす", () => {
+    const page: Page = {
+      ...newPage(),
+      shapes: [],
+      arrows: [{ id: "ar1", from: "ghost", to: "ghost2", manual: false, mx: 0, my: 0, length: 0, angle: 0 }],
+    };
+    expect(duplicatePage(page).arrows).toHaveLength(0);
+  });
+
+  it("タイトルは「〜のコピー」、無題なら無題のまま", () => {
+    expect(duplicatePage(source()).title).toBe("元ページのコピー");
+    expect(duplicatePage({ ...newPage(), title: "" }).title).toBe("");
+  });
+
+  it("元のページは書き換えない", () => {
+    const original = source();
+    duplicatePage(original);
+    expect(original.steps[0]?.id).toBe("s1");
+    expect(original.shapes[0]?.id).toBe("sh1");
+  });
+});
+
+describe("duplicateNotebook", () => {
+  const source = (): Notebook => {
+    const first = { ...newPage("flowchart", "1"), id: "pg1" };
+    const second = { ...newPage("flowchart", "2"), id: "pg2" };
+    return { id: "nb1", name: "手帳", type: "profile", color: "#C9B6E4", activePageId: "pg2", pages: [first, second] };
+  };
+
+  it("名前に「のコピー」を付けて、ページも全部複製する", () => {
+    const copy = duplicateNotebook(source());
+    expect(copy.name).toBe("手帳のコピー");
+    expect(copy.id).not.toBe("nb1");
+    expect(copy.pages).toHaveLength(2);
+    expect(copy.pages.map((p) => p.id)).not.toContain("pg1");
+  });
+
+  it("ページ名はそのまま（手帳ごとコピーなので中は変えない）", () => {
+    expect(duplicateNotebook(source()).pages.map((p) => p.title)).toEqual(["1", "2"]);
+  });
+
+  it("開いていたページの位置を引き継ぐ", () => {
+    const copy = duplicateNotebook(source());
+    expect(copy.activePageId).toBe(copy.pages[1]?.id);
+  });
+
+  it("activePageId が壊れていても先頭ページに落とす", () => {
+    const copy = duplicateNotebook({ ...source(), activePageId: "missing" });
+    expect(copy.activePageId).toBe(copy.pages[0]?.id);
+  });
+
+  it("無題の手帳は表示名からコピー名を作る", () => {
+    const copy = duplicateNotebook({ ...source(), name: "", type: "notestyle" });
+    expect(copy.name).toBe("無題のノートのコピー");
+  });
+
+  it("ページが1枚も無い（壊れた）手帳でも落ちない", () => {
+    const copy = duplicateNotebook({ ...source(), pages: [] });
+    expect(copy.pages).toEqual([]);
+    expect(copy.activePageId).toBe("pg2");
+  });
+});
+
+describe("stepProgress", () => {
+  it("トップレベルと分岐の中を合わせて数える", () => {
+    const tree: Step[] = [
+      plain("a", "", true),
+      plain("b"),
+      ifStep("if1", [plain("y1", "", true), plain("y2")], [plain("n1", "", true)]),
+    ];
+    expect(stepProgress(tree)).toEqual({ done: 3, total: 5 });
+  });
+
+  it("if カード自体は数に入れない", () => {
+    expect(stepProgress([ifStep("if1")])).toEqual({ done: 0, total: 0 });
+  });
+
+  it("工程が無ければ 0/0", () => {
+    expect(stepProgress([])).toEqual({ done: 0, total: 0 });
   });
 });
 

@@ -1,8 +1,11 @@
 import { Fragment } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
-import { colors, fonts } from "@/lib/theme";
-import { useNotebooks } from "@/state/notebooks";
+import { StyleSheet, Text, View } from "react-native";
+import { stepProgress } from "@/lib/model";
+import { colors, space, text } from "@/lib/theme";
 import type { Page } from "@/lib/types";
+import { useNotebooks } from "@/state/notebooks";
+import { useUi } from "@/state/ui";
+import { AppButton } from "@/components/ui/kit";
 import { StepCard } from "./StepCard";
 import { IfCard } from "./IfCard";
 
@@ -15,35 +18,62 @@ function Connector() {
   );
 }
 
+// 「いくつ終わったか」は工程表そのものの情報なので、飾りではなく見出しとして置く。
+function Progress({ done, total }: { done: number; total: number }) {
+  const ratio = total === 0 ? 0 : done / total;
+  const complete = total > 0 && done === total;
+  return (
+    <View
+      style={styles.progress}
+      accessibilityRole="progressbar"
+      accessibilityLabel={`${total}工程のうち${done}つ完了`}
+    >
+      <View style={styles.progressTrack}>
+        <View style={[styles.progressFill, { width: `${Math.round(ratio * 100)}%` }]} />
+      </View>
+      <Text style={styles.progressText}>{complete ? `ぜんぶできた！🎉 ${done}/${total}` : `${done}/${total}`}</Text>
+    </View>
+  );
+}
+
 export function FlowchartSection({ page }: { page: Page }) {
   const addStep = useNotebooks((s) => s.addStep);
   const addIfStep = useNotebooks((s) => s.addIfStep);
+  const setFocus = useUi((s) => s.setFocus);
+
+  const { done, total } = stepProgress(page.steps);
 
   return (
     <View>
       {page.steps.length === 0 ? (
-        <Text style={styles.empty}>まだ工程がありません…{"\n"}下の「＋ 工程を追加」から始めてみてね🐰</Text>
+        <Text style={styles.empty}>ここは工程表のページ。{"\n"}下の「＋ 工程を追加」から1つめを書いてみてね🐰</Text>
       ) : (
-        <View style={styles.steps}>
-          {page.steps.map((step, index) => (
-            <Fragment key={step.id}>
-              {index > 0 ? <Connector /> : null}
-              {step.type === "if" ? (
-                <IfCard step={step} index={index} count={page.steps.length} />
-              ) : (
-                <StepCard step={step} index={index} count={page.steps.length} />
-              )}
-            </Fragment>
-          ))}
-        </View>
+        <>
+          {total > 0 ? <Progress done={done} total={total} /> : null}
+          <View style={styles.steps}>
+            {page.steps.map((step, index) => (
+              <Fragment key={step.id}>
+                {index > 0 ? <Connector /> : null}
+                {step.type === "if" ? (
+                  <IfCard step={step} index={index} count={page.steps.length} />
+                ) : (
+                  <StepCard step={step} index={index} count={page.steps.length} />
+                )}
+              </Fragment>
+            ))}
+          </View>
+        </>
       )}
 
-      <Pressable style={styles.addMain} onPress={addStep}>
-        <Text style={styles.addMainText}>＋ 工程を追加</Text>
-      </Pressable>
-      <Pressable style={styles.addIf} onPress={addIfStep}>
-        <Text style={styles.addIfText}>＋🔀 if分岐を追加</Text>
-      </Pressable>
+      <View style={styles.actions}>
+        <AppButton title="＋ 工程を追加" variant="primary" onPress={() => setFocus(addStep())} style={styles.addMain} />
+        <AppButton
+          title="＋🔀 if分岐を追加"
+          variant="dashed"
+          onPress={() => setFocus(addIfStep())}
+          style={styles.addIf}
+        />
+      </View>
     </View>
   );
 }
@@ -52,11 +82,34 @@ const styles = StyleSheet.create({
   empty: {
     textAlign: "center",
     opacity: 0.55,
-    fontFamily: fonts.display,
-    fontSize: 16,
+    ...text.displayS,
     color: colors.ink,
-    paddingVertical: 20,
-    lineHeight: 26,
+    paddingVertical: space.xl,
+  },
+  progress: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.sm,
+    alignSelf: "center",
+    width: "100%",
+    maxWidth: 420,
+    marginBottom: space.md,
+  },
+  progressTrack: {
+    flex: 1,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: colors.veilWeak,
+    overflow: "hidden",
+  },
+  progressFill: {
+    height: "100%",
+    borderRadius: 3,
+    backgroundColor: colors.mint,
+  },
+  progressText: {
+    ...text.caption,
+    color: colors.plum,
   },
   steps: {
     alignItems: "center",
@@ -83,33 +136,16 @@ const styles = StyleSheet.create({
     borderRightColor: "transparent",
     borderTopColor: colors.connector,
   },
-  addMain: {
-    alignSelf: "center",
-    marginTop: 22,
-    backgroundColor: colors.lavender,
-    paddingVertical: 11,
-    paddingHorizontal: 26,
-    borderRadius: 24,
-    boxShadow: "0 4px 12px rgba(155,130,180,0.35)",
+  actions: {
+    alignItems: "center",
+    gap: space.sm,
+    marginTop: space.xl,
   },
-  addMainText: {
-    fontFamily: fonts.bodyBold,
-    fontSize: 14,
-    color: colors.white,
+  addMain: {
+    paddingHorizontal: 26,
   },
   addIf: {
-    alignSelf: "center",
-    marginTop: 10,
-    borderWidth: 1.5,
-    borderColor: "rgba(155,130,180,0.5)",
-    borderStyle: "dashed",
-    paddingVertical: 9,
     paddingHorizontal: 22,
-    borderRadius: 24,
-  },
-  addIfText: {
-    fontFamily: fonts.bodyBold,
-    fontSize: 13,
-    color: colors.plum,
+    paddingVertical: 9,
   },
 });

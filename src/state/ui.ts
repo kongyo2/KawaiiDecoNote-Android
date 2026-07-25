@@ -5,14 +5,19 @@ interface UiState {
   selectedId: string | null;
   connectMode: boolean;
   connectFromId: string | null;
+  // 追加したばかりの工程・テキストの id。マウント時にキーボードを開くために使う。
+  focusId: string | null;
 
   showToast: (message: string) => void;
   hideToast: () => void;
   select: (id: string | null) => void;
   toggleConnectMode: () => void;
   setConnectFrom: (id: string | null) => void;
+  setFocus: (id: string | null) => void;
   resetBoardUi: () => void;
 }
+
+const TOAST_MS = 1800;
 
 let toastTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -21,11 +26,12 @@ export const useUi = create<UiState>()((set, get) => ({
   selectedId: null,
   connectMode: false,
   connectFromId: null,
+  focusId: null,
 
   showToast: (message) => {
     if (toastTimer) clearTimeout(toastTimer);
     set({ toast: message });
-    toastTimer = setTimeout(() => set({ toast: null }), 1800);
+    toastTimer = setTimeout(() => set({ toast: null }), TOAST_MS);
   },
 
   hideToast: () => {
@@ -40,5 +46,9 @@ export const useUi = create<UiState>()((set, get) => ({
   toggleConnectMode: () => set({ connectMode: !get().connectMode, connectFromId: null }),
   setConnectFrom: (id) => set({ connectFromId: id }),
 
-  resetBoardUi: () => set({ selectedId: null, connectMode: false, connectFromId: null }),
+  setFocus: (id) => {
+    if (get().focusId !== id) set({ focusId: id });
+  },
+
+  resetBoardUi: () => set({ selectedId: null, connectMode: false, connectFromId: null, focusId: null }),
 }));

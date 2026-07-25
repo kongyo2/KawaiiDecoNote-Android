@@ -1,13 +1,11 @@
 import { StyleSheet, TextInput, View } from "react-native";
 import type { LayoutChangeEvent } from "react-native";
-import { colors, fonts } from "@/lib/theme";
+import { chic, colors, radii, shadows, space, text } from "@/lib/theme";
 import { useNotebooks } from "@/state/notebooks";
 import { SHAPE_MAX_WIDTH, SHAPE_MIN_WIDTH } from "@/lib/types";
 import type { Shape } from "@/lib/types";
 import { GRIP_RESERVE, Transformable } from "@/components/transform/Transformable";
 import type { TransformPatch } from "@/components/transform/Transformable";
-
-const CHIC_HANDLE = "#555";
 
 export function ShapeCard({
   shape,
@@ -34,6 +32,7 @@ export function ShapeCard({
 
   const onChange = (patch: TransformPatch) => updateShape(shape.id, patch);
   const onLayout = (e: LayoutChangeEvent) => onMeasureHeight(shape.id, e.nativeEvent.layout.height);
+  const preview = shape.text.trim().slice(0, 20);
 
   return (
     <Transformable
@@ -46,9 +45,11 @@ export function ShapeCard({
       selected={connectMode ? false : selected}
       bodyDraggable={false}
       showDragHandle={!connectMode}
-      handleTint={CHIC_HANDLE}
+      handleTint={chic.handle}
       boundsWidth={boundsWidth}
       minY={GRIP_RESERVE}
+      label={preview ? `テキスト「${preview}」` : "空のテキスト"}
+      deleteLabel="このテキストを消す"
       onSelect={() => (connectMode ? onConnectTap(shape.id) : onSelect())}
       onChange={onChange}
       onDelete={() => deleteShape(shape.id)}
@@ -60,7 +61,8 @@ export function ShapeCard({
           multiline
           editable={!connectMode && selected}
           placeholder="なんでも書いてね…"
-          placeholderTextColor="rgba(90,77,112,0.4)"
+          placeholderTextColor={colors.placeholder}
+          cursorColor={chic.ink}
           style={styles.text}
         />
       </View>
@@ -70,23 +72,21 @@ export function ShapeCard({
 
 const styles = StyleSheet.create({
   card: {
-    backgroundColor: colors.white,
-    borderRadius: 12,
+    backgroundColor: chic.card,
+    borderRadius: radii.small,
     borderWidth: 1,
-    borderColor: "#eee",
-    padding: 10,
-    boxShadow: "0 1px 5px rgba(0,0,0,0.10)",
+    borderColor: chic.borderSoft,
+    padding: space.sm,
+    boxShadow: shadows.chicCard,
   },
   pending: {
     borderWidth: 2,
-    borderColor: colors.chicLine,
+    borderColor: chic.rule,
     borderStyle: "dashed",
   },
   text: {
-    fontFamily: fonts.body,
-    fontSize: 13,
+    ...text.body,
     color: colors.ink,
-    lineHeight: 19,
     padding: 0,
     minHeight: 20,
   },

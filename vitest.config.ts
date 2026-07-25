@@ -14,7 +14,7 @@ export default defineConfig({
       provider: "v8",
       reporter: ["text", "text-summary", "html"],
       // 純粋ロジック（RN/Expo に依存しない部分）だけをカバレッジ対象にする。
-      include: ["src/lib/model.ts", "src/lib/format.ts"],
+      include: ["src/lib/model.ts", "src/lib/format.ts", "src/lib/color.ts", "src/lib/backupFormat.ts"],
       thresholds: {
         lines: 100,
         functions: 100,

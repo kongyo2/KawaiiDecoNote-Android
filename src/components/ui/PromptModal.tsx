@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Modal, Pressable, StyleSheet, Text, View } from "react-native";
-import { colors, fonts, radii } from "@/lib/theme";
+import { colors, radii, space, text } from "@/lib/theme";
 import { AppButton, AppTextInput } from "./kit";
 
 export function PromptModal({
@@ -31,8 +31,7 @@ export function PromptModal({
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onCancel}>
       <View style={styles.backdrop}>
-        {}
-        <Pressable style={StyleSheet.absoluteFill} onPress={onCancel} />
+        <Pressable style={StyleSheet.absoluteFill} onPress={onCancel} accessibilityLabel="閉じる" />
         <View style={styles.card}>
           <Text style={styles.title}>{title}</Text>
           <AppTextInput
@@ -41,6 +40,8 @@ export function PromptModal({
             placeholder={placeholder ?? ""}
             {...(maxLength !== undefined ? { maxLength } : {})}
             autoFocus
+            returnKeyType="done"
+            onSubmitEditing={() => onSubmit(value.trim())}
             style={styles.input}
           />
           <View style={styles.row}>
@@ -71,20 +72,19 @@ const styles = StyleSheet.create({
     maxWidth: 360,
     backgroundColor: colors.paper,
     borderRadius: radii.panel,
-    padding: 18,
+    padding: space.lg + 2,
   },
   title: {
-    fontFamily: fonts.display,
-    fontSize: 16,
+    ...text.displayS,
     color: colors.plum,
-    marginBottom: 12,
+    marginBottom: space.md,
   },
   input: {
-    marginBottom: 14,
+    marginBottom: space.md + 2,
   },
   row: {
     flexDirection: "row",
-    gap: 10,
+    gap: space.sm + 2,
   },
   flex: {
     flex: 1,

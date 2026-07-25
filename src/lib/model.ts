@@ -1,3 +1,4 @@
+import { clamp } from "./format";
 import type {
   AppState,
   Arrow,
@@ -18,7 +19,15 @@ import type {
   StickerType,
 } from "./types";
 import {
+  DEFAULT_BRANCH_LABELS,
+  DEFAULT_FRAME,
+  DEFAULT_NOTEBOOK_COLOR,
+  DEFAULT_PAPER_COLOR,
+  DEFAULT_RULE_STYLE,
   FRAMES,
+  MAX_NOTEBOOK_NAME,
+  MAX_PAGE_TITLE,
+  MAX_POSITION,
   PHOTO_DEFAULT_WIDTH,
   PHOTO_MAX_WIDTH,
   PHOTO_MIN_WIDTH,
@@ -67,12 +76,14 @@ export function seedUid(state: AppState): void {
   uid = max + 1;
 }
 
+// --- ファクトリ ---
+
 export function newPage(type: PageType = "flowchart", title = ""): Page {
   return {
     id: newId(),
     type,
     title,
-    frame: "aurora",
+    frame: DEFAULT_FRAME,
     sparkleOn: false,
     steps: [],
     stickers: [],
@@ -80,12 +91,16 @@ export function newPage(type: PageType = "flowchart", title = ""): Page {
     shapes: [],
     photos: [],
     arrows: [],
-    ruleStyle: "lines",
-    paperColor: "#FFFFFF",
+    ruleStyle: DEFAULT_RULE_STYLE,
+    paperColor: DEFAULT_PAPER_COLOR,
   };
 }
 
-export function newNotebook(type: NotebookType = "profile", name = "", color = "#C9B6E4"): Notebook {
+export function newNotebook(
+  type: NotebookType = "profile",
+  name = "",
+  color: string = DEFAULT_NOTEBOOK_COLOR,
+): Notebook {
   const first = newPage("flowchart", "");
   return { id: newId(), name, type, color, activePageId: first.id, pages: [first] };
 }
@@ -100,7 +115,7 @@ export function newIfStep(): IfStep {
     type: "if",
     text: "",
     done: false,
-    labels: { yes: "はい", no: "いいえ" },
+    labels: { ...DEFAULT_BRANCH_LABELS },
     branches: { yes: [], no: [] },
   };
 }
@@ -144,24 +159,109 @@ export function removeStepFromTree(steps: Step[], id: string): Step[] {
   return result;
 }
 
-// id が一致する工程を木のどこにあっても探して返す（見つからなければ undefined）。
-export function findStepInTree(steps: Step[], id: string): Step | undefined {
-  for (const s of steps) {
-    if (s.id === id) return s;
-    if (s.type === "if") {
-      const found = findStepInTree(s.branches.yes, id) ?? findStepInTree(s.branches.no, id);
-      if (found) return found;
-    }
-  }
-  return undefined;
-}
-
 // ifId の if 分岐（key 側）の末尾に child を追加した新しい配列を返す。
 export function appendToBranch(steps: Step[], ifId: string, key: BranchKey, child: Step): Step[] {
   return updateStepInTree(steps, ifId, (s) =>
     s.type === "if" ? { ...s, branches: { ...s.branches, [key]: [...s.branches[key], child] } } : s,
   );
 }
+
+// id の工程を「同じ並びの中で」ひとつ前後に動かす。トップレベルでも分岐の中でも
+// 動くので、UI 側は工程が木のどこにあるかを気にしなくていい。
+export function moveStepInTree(steps: Step[], id: string, dir: -1 | 1): Step[] {
+  const index = steps.findIndex((s) => s.id === id);
+  if (index >= 0) {
+    const target = index + dir;
+    const a = steps[index];
+    const b = steps[target];
+    if (!a || !b) return steps; // 端にいるので動かせない
+    const next = steps.slice();
+    next[index] = b;
+    next[target] = a;
+    return next;
+  }
+  return steps.map((s) =>
+    s.type === "if"
+      ? {
+          ...s,
+          branches: {
+            yes: moveStepInTree(s.branches.yes, id, dir),
+            no: moveStepInTree(s.branches.no, id, dir),
+          },
+        }
+      : s,
+  );
+}
+
+// --- 複製（手帳コピー／ページコピー） ---
+
+const COPY_SUFFIX = "のコピー";
+
+// 「〜のコピー」を付ける。入力欄の文字数上限を超えないように元の名前を詰める。
+export function copyName(base: string, maxLength: number): string {
+  const room = Math.max(0, maxLength - COPY_SUFFIX.length);
+  return `${base.length > room ? base.slice(0, room) : base}${COPY_SUFFIX}`;
+}
+
+function cloneStep(step: Step): Step {
+  if (step.type === "if") {
+    return {
+      id: newId(),
+      type: "if",
+      text: step.text,
+      done: step.done,
+      labels: { ...step.labels },
+      branches: { yes: step.branches.yes.map(cloneStep), no: step.branches.no.map(cloneStep) },
+    };
+  }
+  return { ...step, id: newId() };
+}
+
+// ページを丸ごと複製する。中の要素にはすべて新しい id を振り、矢印の参照も
+// 新しいシェイプ id へ張り替える（元ページと id を共有しないので、あとから
+// どちらを編集しても互いに影響しない）。
+export function duplicatePage(
+  page: Page,
+  title: string = page.title ? copyName(page.title, MAX_PAGE_TITLE) : "",
+): Page {
+  const shapeIds = new Map<string, string>();
+  const shapes = page.shapes.map((s) => {
+    const id = newId();
+    shapeIds.set(s.id, id);
+    return { ...s, id };
+  });
+  return {
+    ...page,
+    id: newId(),
+    title,
+    steps: page.steps.map(cloneStep),
+    stickers: page.stickers.map((s) => ({ ...s, id: newId() })),
+    shapes,
+    photos: page.photos.map((p) => ({ ...p, id: newId() })),
+    arrows: page.arrows.flatMap((a) => {
+      const from = shapeIds.get(a.from);
+      const to = shapeIds.get(a.to);
+      return from && to ? [{ ...a, id: newId(), from, to }] : [];
+    }),
+  };
+}
+
+// 手帳を丸ごと複製する。開いていたページの位置はコピー先でも引き継ぐ。
+export function duplicateNotebook(nb: Notebook): Notebook {
+  const activeIndex = nb.pages.findIndex((p) => p.id === nb.activePageId);
+  const pages = nb.pages.map((p) => duplicatePage(p, p.title));
+  return {
+    ...nb,
+    id: newId(),
+    name: copyName(notebookDisplayName(nb), MAX_NOTEBOOK_NAME),
+    pages,
+    activePageId: pages[Math.max(0, activeIndex)]?.id ?? nb.activePageId,
+  };
+}
+
+// --- 取り込み時の正規化 ---
+// 端末に保存した JSON も、書き出したバックアップも、必ずここを通してから
+// 使う。壊れた値・想定外の型が入っていても既定値に落として読み進める。
 
 function rec(v: unknown): Record<string, unknown> {
   return v && typeof v === "object" ? (v as Record<string, unknown>) : {};
@@ -173,10 +273,8 @@ function num(v: unknown, fallback = 0): number {
   return typeof v === "number" && Number.isFinite(v) ? v : fallback;
 }
 function clampNum(v: unknown, fallback: number, min: number, max: number): number {
-  return Math.min(max, Math.max(min, num(v, fallback)));
+  return clamp(num(v, fallback), min, max);
 }
-
-const MAX_POSITION = 20000;
 function bool(v: unknown, fallback = false): boolean {
   return typeof v === "boolean" ? v : fallback;
 }
@@ -209,9 +307,11 @@ function normalizeStep(raw: unknown): Step {
       type: "if",
       text: str(r.text),
       done: bool(r.done),
-      labels: { yes: str(labels.yes, "はい"), no: str(labels.no, "いいえ") },
-      // 分岐の中身も工程として再帰的に正規化する。
-      // 旧データ（type なしの分岐工程 {id,text,done}）は type:"step" の工程に変換される。
+      labels: {
+        yes: str(labels.yes, DEFAULT_BRANCH_LABELS.yes),
+        no: str(labels.no, DEFAULT_BRANCH_LABELS.no),
+      },
+      // 分岐の中身も工程として再帰的に正規化する（type なしの分岐工程は type:"step" になる）。
       branches: {
         yes: list(branches.yes).map(normalizeStep),
         no: list(branches.no).map(normalizeStep),
@@ -251,7 +351,7 @@ function normalizeShape(raw: unknown): Shape {
 
 function normalizePhoto(raw: unknown): Photo | null {
   const r = rec(raw);
-  const dataUrl = str(r.dataUrl) || str(r.image);
+  const dataUrl = str(r.dataUrl);
   if (!/^data:image\//i.test(dataUrl)) return null;
   return {
     ...normalizePlacement(r),
@@ -259,8 +359,6 @@ function normalizePhoto(raw: unknown): Photo | null {
     dataUrl,
   };
 }
-
-const MANUAL_ARROW_MAX = 20000;
 
 function normalizeArrow(raw: unknown): Arrow | null {
   const r = rec(raw);
@@ -272,12 +370,14 @@ function normalizeArrow(raw: unknown): Arrow | null {
   const my = num(r.my);
   const length = num(r.length);
   const angle = num(r.angle);
+  // 保存データ側の上限は MAX_POSITION でゆるく見る（画面上のリサイズ上限
+  // ARROW_MAX_LENGTH より広い値が入っていても、位置情報として妥当なら残す）。
   const manualOk =
     bool(r.manual) &&
     length > 0 &&
-    length <= MANUAL_ARROW_MAX &&
-    Math.abs(mx) <= MANUAL_ARROW_MAX &&
-    Math.abs(my) <= MANUAL_ARROW_MAX;
+    length <= MAX_POSITION &&
+    Math.abs(mx) <= MAX_POSITION &&
+    Math.abs(my) <= MAX_POSITION;
   return manualOk
     ? { id, from, to, manual: true, mx, my, length, angle }
     : { id, from, to, manual: false, mx: 0, my: 0, length: 0, angle: 0 };
@@ -291,7 +391,7 @@ export function normalizePage(raw: unknown): Page {
     id: idOf(r),
     type: oneOf<PageType>(r.type, ["flowchart", "notebook"], "flowchart"),
     title: str(r.title),
-    frame: oneOf<Frame>(r.frame, FRAMES, "aurora"),
+    frame: oneOf<Frame>(r.frame, FRAMES, DEFAULT_FRAME),
     sparkleOn: bool(r.sparkleOn),
     steps: list(r.steps).map(normalizeStep),
     stickers: list(r.stickers).map(normalizeSticker),
@@ -304,8 +404,8 @@ export function normalizePage(raw: unknown): Page {
       .map(normalizeArrow)
       .filter((a): a is Arrow => a !== null)
       .filter((a) => shapeIds.has(a.from) && shapeIds.has(a.to)),
-    ruleStyle: oneOf<RuleStyle>(r.ruleStyle, RULE_STYLES, "lines"),
-    paperColor: hexColor(r.paperColor, "#FBF7F2"),
+    ruleStyle: oneOf<RuleStyle>(r.ruleStyle, RULE_STYLES, DEFAULT_RULE_STYLE),
+    paperColor: hexColor(r.paperColor, DEFAULT_PAPER_COLOR),
   };
 }
 
@@ -315,25 +415,15 @@ export function normalizeNotebook(raw: unknown): Notebook | null {
   const pages = list(r.pages).filter(isPlainObject).map(normalizePage);
   const firstPage = pages[0];
   if (!firstPage) return null;
-  const rawType = r.type === "rollbahn" ? "notestyle" : r.type;
-  const type = oneOf<NotebookType>(rawType, ["profile", "notestyle"], "profile");
+  const type = oneOf<NotebookType>(r.type, ["profile", "notestyle"], "profile");
   let activePageId = str(r.activePageId);
   if (!pages.some((p) => p.id === activePageId)) activePageId = firstPage.id;
-
-  if (type === "notestyle") {
-    for (const p of pages) {
-      if (p.note.trim()) {
-        p.shapes.push({ id: newId(), text: p.note, x: 20, y: 20, w: SHAPE_DEFAULT_WIDTH, rot: 0 });
-        p.note = "";
-      }
-    }
-  }
 
   return {
     id: idOf(r),
     name: str(r.name),
     type,
-    color: hexColor(r.color, "#C9B6E4"),
+    color: hexColor(r.color, DEFAULT_NOTEBOOK_COLOR),
     activePageId,
     pages,
   };
@@ -389,6 +479,8 @@ export function normalizeState(raw: unknown): AppState {
   return { activeNotebookId, notebooks };
 }
 
+// --- 表示用ヘルパー ---
+
 export function notebookDisplayName(nb: Pick<Notebook, "name" | "type">): string {
   if (nb.name) return nb.name;
   return nb.type === "notestyle" ? "無題のノート" : "無題のプロフィール帳";
@@ -396,4 +488,23 @@ export function notebookDisplayName(nb: Pick<Notebook, "name" | "type">): string
 
 export function pageDisplayTitle(pg: Pick<Page, "title">): string {
   return pg.title || "無題のページ";
+}
+
+// 工程の進み具合。if分岐の中の工程も数える（分岐カード自体は数えない）。
+export function stepProgress(steps: Step[]): { done: number; total: number } {
+  let done = 0;
+  let total = 0;
+  const walk = (nodes: Step[]): void => {
+    for (const s of nodes) {
+      if (s.type === "if") {
+        walk(s.branches.yes);
+        walk(s.branches.no);
+      } else {
+        total += 1;
+        if (s.done) done += 1;
+      }
+    }
+  };
+  walk(steps);
+  return { done, total };
 }

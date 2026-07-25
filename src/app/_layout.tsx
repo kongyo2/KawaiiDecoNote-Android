@@ -17,6 +17,8 @@ import { recoverPendingPhotoAsDataUrl } from "@/lib/files";
 import { colors } from "@/lib/theme";
 import { selectCurrentNotebook, selectCurrentPage, useNotebooks } from "@/state/notebooks";
 
+const AUTOSAVE_MS = 8000;
+
 void SplashScreen.preventAutoHideAsync();
 
 export default function RootLayout() {
@@ -35,6 +37,7 @@ export default function RootLayout() {
     setInitialized(true);
   }, []);
 
+  // アプリが前面から外れる瞬間と、一定時間ごとに保存する。
   useEffect(() => {
     const sub = AppState.addEventListener("change", (state) => {
       if (state !== "active") useNotebooks.getState().flushPending();
@@ -43,10 +46,11 @@ export default function RootLayout() {
   }, []);
 
   useEffect(() => {
-    const id = setInterval(() => useNotebooks.getState().flushPending(), 8000);
+    const id = setInterval(() => useNotebooks.getState().flushPending(), AUTOSAVE_MS);
     return () => clearInterval(id);
   }, []);
 
+  // 写真を選んでいる途中でAndroidにアプリを落とされた場合、戻ってきたときに拾い直す。
   useEffect(() => {
     const recover = async () => {
       const before = useNotebooks.getState();
@@ -73,7 +77,8 @@ export default function RootLayout() {
 
   return (
     <GestureHandlerRootView style={styles.root}>
-      <ReducedMotionConfig mode={ReduceMotion.Never} />
+      {/* 端末の「視差効果を減らす」設定をそのまま尊重する */}
+      <ReducedMotionConfig mode={ReduceMotion.System} />
       <SafeAreaProvider>
         <View style={styles.root}>
           <Background chic={chic} />

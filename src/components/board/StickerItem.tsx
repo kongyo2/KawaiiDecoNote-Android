@@ -1,15 +1,15 @@
-import { colors } from "@/lib/theme";
+import { chic, colors } from "@/lib/theme";
 import { useNotebooks } from "@/state/notebooks";
 import { STICKER_MAX_SIZE, STICKER_MIN_SIZE } from "@/lib/types";
 import type { Sticker } from "@/lib/types";
-import { StickerShape } from "@/components/ui/StickerShape";
+import { StickerShape, stickerLabel } from "@/components/ui/StickerShape";
 import { Transformable } from "@/components/transform/Transformable";
 import type { TransformPatch } from "@/components/transform/Transformable";
 
 export function StickerItem({
   sticker,
   selected,
-  chic,
+  chic: chicMode,
   onSelect,
   boundsWidth,
 }: {
@@ -31,6 +31,8 @@ export function StickerItem({
     updateSticker(sticker.id, next);
   };
 
+  const name = `${stickerLabel(sticker.type)}のシール`;
+
   return (
     <Transformable
       x={sticker.x}
@@ -42,8 +44,10 @@ export function StickerItem({
       square
       selected={selected}
       bodyDraggable
-      handleTint={chic ? "#555" : colors.plum}
+      handleTint={chicMode ? chic.handle : colors.plum}
       boundsWidth={boundsWidth}
+      label={name}
+      deleteLabel={`${name}をはがす`}
       onSelect={onSelect}
       onChange={onChange}
       onDelete={() => deleteSticker(sticker.id)}

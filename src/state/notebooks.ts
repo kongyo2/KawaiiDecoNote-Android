@@ -2,6 +2,9 @@ import { create } from "zustand";
 import { diagnoseStorage, emptyState, loadState, saveState } from "@/lib/store";
 import {
   appendToBranch,
+  duplicateNotebook as cloneNotebook,
+  duplicatePage as clonePage,
+  moveStepInTree,
   newId,
   newIfStep,
   newNotebook,
@@ -38,12 +41,14 @@ interface NotebooksState {
   importState: (state: AppState) => void;
 
   createNotebook: (type: NotebookType, name: string, color: string) => string;
+  duplicateNotebook: (id: string) => string | null;
   deleteNotebook: (id: string) => void;
   renameNotebook: (id: string, name: string) => void;
   openNotebook: (id: string) => void;
   closeNotebook: () => void;
 
   addPage: (type: PageType) => void;
+  duplicatePage: (id: string) => boolean;
   setActivePage: (id: string) => void;
   deletePage: (id: string) => boolean;
   setPageTitle: (title: string) => void;
@@ -54,22 +59,23 @@ interface NotebooksState {
   setNote: (note: string) => void;
   resetPage: () => void;
 
-  addStep: () => void;
-  addIfStep: () => void;
+  // 追加系は新しい要素の id を返す（呼び出し側でそこへフォーカスを移すため）。
+  addStep: () => string;
+  addIfStep: () => string;
   setStepText: (stepId: string, text: string) => void;
   toggleStep: (stepId: string) => boolean;
-  moveStep: (index: number, dir: -1 | 1) => void;
+  moveStep: (stepId: string, dir: -1 | 1) => void;
   deleteStep: (stepId: string) => void;
 
   setBranchLabel: (stepId: string, key: BranchKey, label: string) => void;
-  addBranchStep: (stepId: string, key: BranchKey) => void;
-  addBranchIfStep: (stepId: string, key: BranchKey) => void;
+  addBranchStep: (stepId: string, key: BranchKey) => string;
+  addBranchIfStep: (stepId: string, key: BranchKey) => string;
 
   addSticker: (type: StickerType, x: number, y: number) => void;
   updateSticker: (id: string, patch: Partial<Pick<Sticker, "x" | "y" | "rot" | "size">>) => void;
   deleteSticker: (id: string) => void;
 
-  addShape: (x: number, y: number) => void;
+  addShape: (x: number, y: number) => string;
   setShapeText: (id: string, text: string) => void;
   updateShape: (id: string, patch: { x?: number; y?: number; w?: number; rot?: number }) => void;
   deleteShape: (id: string) => void;
@@ -92,11 +98,18 @@ const MAX_UNDO = 15;
 const CORRUPT_MESSAGE =
   "保存データが壊れていて読めませんでした。壊れたデータは退避しました。新しく編集して上書きする前に、必要なら「📂 読み込み」でバックアップから復元してください。";
 
+// 巻き戻しの「変化したか」判定から外すキー。
+// - dataUrl: 写真の実体は巨大なので履歴には持たず、photoBlobs から戻す
+// - activeNotebookId / activePageId: どこを開いているかは操作履歴ではないので、
+//   ページを切り替えただけで履歴が1手増える（＝本当の編集が押し出される）のを防ぐ
+const HISTORY_IGNORED_KEYS = new Set(["dataUrl", "activeNotebookId", "activePageId"]);
+
 export const useNotebooks = create<NotebooksState>()((set, get) => {
   let saveTimer: ReturnType<typeof setTimeout> | null = null;
   let dirty = false;
   let pendingUndoable = true;
   let lastCommitted: string | null = null;
+  let lastHistoryKey: string | null = null;
   let undoStack: string[] = [];
   let loadCorrupt = false;
   const photoBlobs = new Map<string, string>();
@@ -111,7 +124,12 @@ export const useNotebooks = create<NotebooksState>()((set, get) => {
     }
   };
 
+  // 履歴に積む本体（写真の実体だけ抜いた完全な文書）。
   const snapshotFor = (doc: AppState): string => JSON.stringify(doc, (key, value) => (key === "dataUrl" ? "" : value));
+
+  // 履歴に積むかどうかの判定に使う比較キー。
+  const historyKeyFor = (doc: AppState): string =>
+    JSON.stringify(doc, (key, value) => (HISTORY_IGNORED_KEYS.has(key) ? undefined : value));
 
   const rehydratePhotos = (doc: AppState): AppState => {
     for (const nb of doc.notebooks) {
@@ -122,6 +140,20 @@ export const useNotebooks = create<NotebooksState>()((set, get) => {
       }
     }
     return doc;
+  };
+
+  // 巻き戻しても「いま開いている手帳・ページ」は動かさない。
+  const preserveNavigation = (restored: AppState, current: AppState): AppState => {
+    const currentPageOf = new Map(current.notebooks.map((nb) => [nb.id, nb.activePageId]));
+    const notebooks = restored.notebooks.map((nb) => {
+      const wanted = currentPageOf.get(nb.id);
+      return wanted && nb.pages.some((p) => p.id === wanted) ? { ...nb, activePageId: wanted } : nb;
+    });
+    const activeNotebookId =
+      current.activeNotebookId && notebooks.some((n) => n.id === current.activeNotebookId)
+        ? current.activeNotebookId
+        : null;
+    return { activeNotebookId, notebooks };
   };
 
   const pruneBlobs = (): void => {
@@ -153,16 +185,18 @@ export const useNotebooks = create<NotebooksState>()((set, get) => {
     const doc = get().doc;
     capturePhotoBlobs(doc);
     const snapshot = snapshotFor(doc);
+    const historyKey = historyKeyFor(doc);
     try {
       saveState(doc);
       dirty = false;
       if (!loadCorrupt && !get().storageOk) set({ storageOk: true, storageError: "" });
-      if (pendingUndoable && lastCommitted !== null && lastCommitted !== snapshot) {
+      if (pendingUndoable && lastCommitted !== null && lastHistoryKey !== historyKey) {
         undoStack.push(lastCommitted);
         if (undoStack.length > MAX_UNDO) undoStack.shift();
         set({ canUndo: true });
       }
       lastCommitted = snapshot;
+      lastHistoryKey = historyKey;
       pendingUndoable = true;
       pruneBlobs();
     } catch (e) {
@@ -178,7 +212,9 @@ export const useNotebooks = create<NotebooksState>()((set, get) => {
   };
 
   interface CommitOpts {
+    // 入力中など、こまめに保存したくない変更は immediate: false で 400ms まとめる。
     immediate?: boolean;
+    // 巻き戻しの区切りにしない変更（巻き戻し操作そのものなど）。
     undoable?: boolean;
   }
 
@@ -191,11 +227,6 @@ export const useNotebooks = create<NotebooksState>()((set, get) => {
     pendingUndoable = pendingUndoable && undoable;
     if (immediate) flushSave();
     else scheduleSave();
-    if (!undoable) {
-      undoStack = [];
-      pruneBlobs();
-      if (get().canUndo) set({ canUndo: false });
-    }
   };
 
   const flushPending = (): void => {
@@ -222,11 +253,13 @@ export const useNotebooks = create<NotebooksState>()((set, get) => {
     canUndo: false,
 
     initialize: () => {
+      if (get().ready) return;
       const { state: doc, corrupt } = loadState();
       const diag = diagnoseStorage();
       photoBlobs.clear();
       capturePhotoBlobs(doc);
       lastCommitted = snapshotFor(doc);
+      lastHistoryKey = historyKeyFor(doc);
       undoStack = [];
       loadCorrupt = corrupt;
       set({
@@ -255,9 +288,9 @@ export const useNotebooks = create<NotebooksState>()((set, get) => {
       }
       const prev = undoStack.pop();
       if (prev === undefined) return false;
-      const restored = rehydratePhotos(JSON.parse(prev) as AppState);
-      restored.activeNotebookId = get().doc.activeNotebookId;
+      const restored = preserveNavigation(rehydratePhotos(JSON.parse(prev) as AppState), get().doc);
       lastCommitted = snapshotFor(restored);
+      lastHistoryKey = historyKeyFor(restored);
       set({ doc: restored, canUndo: undoStack.length > 0 });
       dirty = true;
       pendingUndoable = false;
@@ -265,16 +298,12 @@ export const useNotebooks = create<NotebooksState>()((set, get) => {
       return true;
     },
 
+    // 取り込みも「1手」として巻き戻せるようにしておく（取り込むファイルを
+    // 間違えても直前の状態へ戻せる）。写真の実体は pruneBlobs が参照を見て
+    // 面倒を見るので、ここでは消さない。
     importState: (state) => {
-      photoBlobs.clear();
-      capturePhotoBlobs(state);
-      lastCommitted = snapshotFor(state);
-      undoStack = [];
       loadCorrupt = false;
-      set({ doc: state, canUndo: false });
-      dirty = true;
-      pendingUndoable = false;
-      flushSave();
+      commit(state);
     },
 
     flushPending,
@@ -282,19 +311,28 @@ export const useNotebooks = create<NotebooksState>()((set, get) => {
     createNotebook: (type, name, color) => {
       const nb = newNotebook(type, name, color);
       const doc = get().doc;
-      commit({ activeNotebookId: nb.id, notebooks: [...doc.notebooks, nb] }, { undoable: false });
+      commit({ activeNotebookId: nb.id, notebooks: [...doc.notebooks, nb] });
       return nb.id;
+    },
+
+    duplicateNotebook: (id) => {
+      const doc = get().doc;
+      const index = doc.notebooks.findIndex((nb) => nb.id === id);
+      const source = doc.notebooks[index];
+      if (!source) return null;
+      const copy = cloneNotebook(source);
+      const notebooks = doc.notebooks.slice();
+      notebooks.splice(index + 1, 0, copy);
+      commit({ ...doc, notebooks });
+      return copy.id;
     },
 
     deleteNotebook: (id) => {
       const doc = get().doc;
-      commit(
-        {
-          activeNotebookId: doc.activeNotebookId === id ? null : doc.activeNotebookId,
-          notebooks: doc.notebooks.filter((nb) => nb.id !== id),
-        },
-        { undoable: false },
-      );
+      commit({
+        activeNotebookId: doc.activeNotebookId === id ? null : doc.activeNotebookId,
+        notebooks: doc.notebooks.filter((nb) => nb.id !== id),
+      });
     },
 
     renameNotebook: (id, name) => {
@@ -302,8 +340,17 @@ export const useNotebooks = create<NotebooksState>()((set, get) => {
       commit({ ...doc, notebooks: doc.notebooks.map((nb) => (nb.id === id ? { ...nb, name } : nb)) });
     },
 
-    openNotebook: (id) => commit({ ...get().doc, activeNotebookId: id }, { undoable: false }),
-    closeNotebook: () => commit({ ...get().doc, activeNotebookId: null }, { undoable: false }),
+    openNotebook: (id) => {
+      const doc = get().doc;
+      if (doc.activeNotebookId === id) return;
+      commit({ ...doc, activeNotebookId: id });
+    },
+
+    closeNotebook: () => {
+      const doc = get().doc;
+      if (doc.activeNotebookId === null) return;
+      commit({ ...doc, activeNotebookId: null });
+    },
 
     addPage: (type) =>
       commit(
@@ -311,23 +358,36 @@ export const useNotebooks = create<NotebooksState>()((set, get) => {
           const page = newPage(type, "");
           return { ...nb, pages: [...nb.pages, page], activePageId: page.id };
         }),
-        { undoable: false },
       ),
+
+    duplicatePage: (id) => {
+      const doc = get().doc;
+      const nb = doc.notebooks.find((n) => n.id === doc.activeNotebookId);
+      const index = nb?.pages.findIndex((p) => p.id === id) ?? -1;
+      const source = nb?.pages[index];
+      if (!source) return false;
+      const copy = clonePage(source);
+      commit(
+        mapActiveNotebook((n) => {
+          const pages = n.pages.slice();
+          pages.splice(index + 1, 0, copy);
+          return { ...n, pages, activePageId: copy.id };
+        }),
+      );
+      return true;
+    },
 
     setActivePage: (id) => {
       const doc = get().doc;
       const nb = doc.notebooks.find((n) => n.id === doc.activeNotebookId);
       if (!nb || nb.activePageId === id || !nb.pages.some((p) => p.id === id)) return;
-      commit(
-        mapActiveNotebook((n) => ({ ...n, activePageId: id })),
-        { undoable: false },
-      );
+      commit(mapActiveNotebook((n) => ({ ...n, activePageId: id })));
     },
 
     deletePage: (id) => {
       const doc = get().doc;
       const nb = doc.notebooks.find((n) => n.id === doc.activeNotebookId);
-      if (!nb || nb.pages.length <= 1) return false;
+      if (!nb || nb.pages.length <= 1 || !nb.pages.some((p) => p.id === id)) return false;
       commit(
         mapActiveNotebook((n) => {
           const idx = n.pages.findIndex((p) => p.id === id);
@@ -338,7 +398,6 @@ export const useNotebooks = create<NotebooksState>()((set, get) => {
               : n.activePageId;
           return { ...n, pages, activePageId };
         }),
-        { undoable: false },
       );
       return true;
     },
@@ -361,8 +420,17 @@ export const useNotebooks = create<NotebooksState>()((set, get) => {
     resetPage: () =>
       commit(mapActivePage((pg) => ({ ...pg, steps: [], stickers: [], shapes: [], photos: [], arrows: [], note: "" }))),
 
-    addStep: () => commit(mapActivePage((pg) => ({ ...pg, steps: [...pg.steps, newStep()] }))),
-    addIfStep: () => commit(mapActivePage((pg) => ({ ...pg, steps: [...pg.steps, newIfStep()] }))),
+    addStep: () => {
+      const step = newStep();
+      commit(mapActivePage((pg) => ({ ...pg, steps: [...pg.steps, step] })));
+      return step.id;
+    },
+
+    addIfStep: () => {
+      const step = newIfStep();
+      commit(mapActivePage((pg) => ({ ...pg, steps: [...pg.steps, step] })));
+      return step.id;
+    },
 
     setStepText: (stepId, text) =>
       commit(
@@ -388,20 +456,7 @@ export const useNotebooks = create<NotebooksState>()((set, get) => {
       return nowDone;
     },
 
-    moveStep: (index, dir) =>
-      commit(
-        mapActivePage((pg) => {
-          const target = index + dir;
-          if (target < 0 || target >= pg.steps.length) return pg;
-          const steps = pg.steps.slice();
-          const a = steps[index];
-          const b = steps[target];
-          if (!a || !b) return pg;
-          steps[index] = b;
-          steps[target] = a;
-          return { ...pg, steps };
-        }),
-      ),
+    moveStep: (stepId, dir) => commit(mapActivePage((pg) => ({ ...pg, steps: moveStepInTree(pg.steps, stepId, dir) }))),
 
     deleteStep: (stepId) => commit(mapActivePage((pg) => ({ ...pg, steps: removeStepFromTree(pg.steps, stepId) }))),
 
@@ -416,11 +471,17 @@ export const useNotebooks = create<NotebooksState>()((set, get) => {
         { immediate: false },
       ),
 
-    addBranchStep: (stepId, key) =>
-      commit(mapActivePage((pg) => ({ ...pg, steps: appendToBranch(pg.steps, stepId, key, newStep()) }))),
+    addBranchStep: (stepId, key) => {
+      const step = newStep();
+      commit(mapActivePage((pg) => ({ ...pg, steps: appendToBranch(pg.steps, stepId, key, step) })));
+      return step.id;
+    },
 
-    addBranchIfStep: (stepId, key) =>
-      commit(mapActivePage((pg) => ({ ...pg, steps: appendToBranch(pg.steps, stepId, key, newIfStep()) }))),
+    addBranchIfStep: (stepId, key) => {
+      const step = newIfStep();
+      commit(mapActivePage((pg) => ({ ...pg, steps: appendToBranch(pg.steps, stepId, key, step) })));
+      return step.id;
+    },
 
     addSticker: (type, x, y) =>
       commit(
@@ -440,13 +501,16 @@ export const useNotebooks = create<NotebooksState>()((set, get) => {
 
     deleteSticker: (id) => commit(mapActivePage((pg) => ({ ...pg, stickers: pg.stickers.filter((s) => s.id !== id) }))),
 
-    addShape: (x, y) =>
+    addShape: (x, y) => {
+      const id = newId();
       commit(
         mapActivePage((pg) => ({
           ...pg,
-          shapes: [...pg.shapes, { id: newId(), text: "", x, y, w: SHAPE_DEFAULT_WIDTH, rot: 0 }],
+          shapes: [...pg.shapes, { id, text: "", x, y, w: SHAPE_DEFAULT_WIDTH, rot: 0 }],
         })),
-      ),
+      );
+      return id;
+    },
 
     setShapeText: (id, text) =>
       commit(
@@ -507,7 +571,10 @@ export const useNotebooks = create<NotebooksState>()((set, get) => {
 
     resetArrow: (id) =>
       commit(
-        mapActivePage((pg) => ({ ...pg, arrows: pg.arrows.map((a) => (a.id === id ? { ...a, manual: false } : a)) })),
+        mapActivePage((pg) => ({
+          ...pg,
+          arrows: pg.arrows.map((a) => (a.id === id ? { ...a, manual: false, mx: 0, my: 0, length: 0, angle: 0 } : a)),
+        })),
       ),
 
     deleteArrow: (id) => commit(mapActivePage((pg) => ({ ...pg, arrows: pg.arrows.filter((a) => a.id !== id) }))),
@@ -520,6 +587,15 @@ export function selectCurrentNotebook(s: NotebooksState): Notebook | undefined {
 
 export function selectCurrentPage(s: NotebooksState): Page | undefined {
   const nb = selectCurrentNotebook(s);
+  if (!nb) return undefined;
+  return nb.pages.find((p) => p.id === nb.activePageId) ?? nb.pages[0];
+}
+
+export function selectNotebookById(id: string | undefined) {
+  return (s: NotebooksState): Notebook | undefined => (id ? s.doc.notebooks.find((n) => n.id === id) : undefined);
+}
+
+export function activePageOf(nb: Notebook | undefined): Page | undefined {
   if (!nb) return undefined;
   return nb.pages.find((p) => p.id === nb.activePageId) ?? nb.pages[0];
 }

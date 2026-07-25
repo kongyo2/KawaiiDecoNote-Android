@@ -1,7 +1,8 @@
 import { Pressable, StyleSheet, Text, View } from "react-native";
-import { colors, fonts } from "@/lib/theme";
-import { PAPER_COLORS, RULE_STYLES } from "@/lib/types";
+import { chic, space, text } from "@/lib/theme";
+import { colorLabel, PAPER_COLOR_LABELS, PAPER_COLORS, RULE_STYLES } from "@/lib/types";
 import type { RuleStyle } from "@/lib/types";
+import { Chip } from "@/components/ui/kit";
 
 const RULE_LABELS: Record<RuleStyle, string> = {
   lines: "横罫",
@@ -23,24 +24,28 @@ export function NoteControls({
 }) {
   return (
     <View style={styles.wrap}>
-      <View style={styles.row}>
-        {RULE_STYLES.map((r) => {
-          const active = r === ruleStyle;
+      <View style={styles.row} accessibilityRole="radiogroup" accessibilityLabel="罫線">
+        {RULE_STYLES.map((r) => (
+          <Chip key={r} label={RULE_LABELS[r]} active={r === ruleStyle} chicMode onPress={() => onRule(r)} />
+        ))}
+      </View>
+
+      <View style={styles.row} accessibilityRole="radiogroup" accessibilityLabel="用紙の色">
+        <Text style={styles.label}>用紙</Text>
+        {PAPER_COLORS.map((c) => {
+          const selected = paperColor === c;
           return (
-            <Pressable key={r} style={[styles.chip, active && styles.chipActive]} onPress={() => onRule(r)}>
-              <Text style={[styles.chipText, active && styles.chipTextActive]}>{RULE_LABELS[r]}</Text>
-            </Pressable>
+            <Pressable
+              key={c}
+              style={[styles.swatch, { backgroundColor: c }, selected && styles.swatchActive]}
+              onPress={() => onPaper(c)}
+              accessibilityRole="radio"
+              accessibilityState={{ selected }}
+              accessibilityLabel={colorLabel(PAPER_COLOR_LABELS, c)}
+              hitSlop={6}
+            />
           );
         })}
-      </View>
-      <View style={styles.row}>
-        {PAPER_COLORS.map((c) => (
-          <Pressable
-            key={c}
-            style={[styles.swatch, { backgroundColor: c }, paperColor === c && styles.swatchActive]}
-            onPress={() => onPaper(c)}
-          />
-        ))}
       </View>
     </View>
   );
@@ -48,42 +53,28 @@ export function NoteControls({
 
 const styles = StyleSheet.create({
   wrap: {
-    gap: 8,
-    marginBottom: 10,
+    gap: space.sm,
+    marginBottom: space.sm,
   },
   row: {
     flexDirection: "row",
     flexWrap: "wrap",
+    alignItems: "center",
     gap: 6,
   },
-  chip: {
-    paddingVertical: 5,
-    paddingHorizontal: 10,
-    borderRadius: 12,
-    backgroundColor: colors.panel,
-    borderWidth: 1.5,
-    borderColor: "transparent",
-  },
-  chipActive: {
-    borderColor: colors.lavender,
-    backgroundColor: colors.white,
-  },
-  chipText: {
-    fontFamily: fonts.body,
-    fontSize: 11,
-    color: colors.ink,
-  },
-  chipTextActive: {
-    fontFamily: fonts.bodyBold,
+  label: {
+    ...text.micro,
+    color: chic.inkSoft,
+    marginRight: 2,
   },
   swatch: {
-    width: 22,
-    height: 22,
+    width: 24,
+    height: 24,
     borderRadius: 6,
     borderWidth: 2,
-    borderColor: "transparent",
+    borderColor: chic.border,
   },
   swatchActive: {
-    borderColor: colors.plum,
+    borderColor: chic.rule,
   },
 });

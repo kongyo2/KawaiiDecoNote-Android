@@ -1,28 +1,29 @@
 import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
-import { colors, fonts, radii } from "@/lib/theme";
+import { colors, radii, shadows, space, text } from "@/lib/theme";
 import { useNotebooks } from "@/state/notebooks";
-import type { BranchKey, IfStep, NormalStep } from "@/lib/types";
+import { useUi } from "@/state/ui";
+import { BRANCH_KEYS, MAX_BRANCH_LABEL } from "@/lib/types";
+import type { BranchKey, IfStep, NormalStep, Step } from "@/lib/types";
+import { StepActions } from "./StepActions";
 
-// 最上位（cb.steps 直下）の if 分岐カード。上下移動・削除ボタン付き。
+interface Position {
+  isFirst: boolean;
+  isLast: boolean;
+}
+
+// 最上位（page.steps 直下）の if 分岐カード。
 export function IfCard({ step, index, count }: { step: IfStep; index: number; count: number }) {
-  const deleteStep = useNotebooks((s) => s.deleteStep);
-  return <IfCardNode step={step} depth={0} onDelete={() => deleteStep(step.id)} move={{ index, count }} />;
+  return <IfCardNode step={step} depth={0} position={{ isFirst: index === 0, isLast: index === count - 1 }} />;
 }
 
 // if 分岐カードの共通描画（トップレベルでも分岐の中＝ネストでも使う再帰対応版）。
-function IfCardNode({
-  step,
-  depth,
-  onDelete,
-  move,
-}: {
-  step: IfStep;
-  depth: number;
-  onDelete: () => void;
-  move?: { index: number; count: number };
-}) {
+// 「はい／いいえ」は画面幅やネストの深さによらず常に縦1カラムに積む。横に並べると
+// ネストが深いときに文字が潰れるため、Web版もこの見た目に統一されている。
+function IfCardNode({ step, depth, position }: { step: IfStep; depth: number; position: Position }) {
   const setStepText = useNotebooks((s) => s.setStepText);
-  const moveStep = useNotebooks((s) => s.moveStep);
+  const deleteStep = useNotebooks((s) => s.deleteStep);
+  const focusId = useUi((s) => s.focusId);
+  const setFocus = useUi((s) => s.setFocus);
 
   return (
     <View
@@ -40,29 +41,25 @@ function IfCardNode({
           onChangeText={(t) => setStepText(step.id, t)}
           multiline
           placeholder="条件を入力…（例：時間があるか？）"
-          placeholderTextColor="rgba(90,77,112,0.4)"
+          placeholderTextColor={colors.placeholder}
+          autoFocus={focusId === step.id}
+          onFocus={() => focusId === step.id && setFocus(null)}
+          accessibilityLabel="分かれ道の条件"
           style={styles.cond}
         />
-        <View style={styles.actions}>
-          {move ? (
-            <>
-              <Pressable onPress={() => moveStep(move.index, -1)} disabled={move.index === 0} hitSlop={4}>
-                <Text style={[styles.icon, move.index === 0 && styles.iconHidden]}>▲</Text>
-              </Pressable>
-              <Pressable onPress={() => moveStep(move.index, 1)} disabled={move.index === move.count - 1} hitSlop={4}>
-                <Text style={[styles.icon, move.index === move.count - 1 && styles.iconHidden]}>▼</Text>
-              </Pressable>
-            </>
-          ) : null}
-          <Pressable onPress={onDelete} hitSlop={4}>
-            <Text style={styles.icon}>✕</Text>
-          </Pressable>
-        </View>
+        <StepActions
+          stepId={step.id}
+          isFirst={position.isFirst}
+          isLast={position.isLast}
+          deleteLabel="このif分岐を削除"
+          onDelete={() => deleteStep(step.id)}
+        />
       </View>
 
       <View style={styles.branches}>
-        <BranchColumn step={step} branchKey="yes" depth={depth} />
-        <BranchColumn step={step} branchKey="no" depth={depth} />
+        {BRANCH_KEYS.map((key) => (
+          <BranchColumn key={key} step={step} branchKey={key} depth={depth} />
+        ))}
       </View>
     </View>
   );
@@ -72,28 +69,47 @@ function BranchColumn({ step, branchKey, depth }: { step: IfStep; branchKey: Bra
   const setBranchLabel = useNotebooks((s) => s.setBranchLabel);
   const addBranchStep = useNotebooks((s) => s.addBranchStep);
   const addBranchIfStep = useNotebooks((s) => s.addBranchIfStep);
+  const setFocus = useUi((s) => s.setFocus);
+
+  const items = step.branches[branchKey];
 
   return (
     <View style={styles.branch}>
       <TextInput
         value={step.labels[branchKey]}
         onChangeText={(t) => setBranchLabel(step.id, branchKey, t)}
-        maxLength={12}
+        maxLength={MAX_BRANCH_LABEL}
+        accessibilityLabel={branchKey === "yes" ? "はい側のラベル" : "いいえ側のラベル"}
         style={styles.branchLabel}
       />
+
       {/* 分岐の中身は「工程カード」か「入れ子 if 分岐カード」のどちらか */}
-      {step.branches[branchKey].map((item) =>
-        item.type === "if" ? (
-          <NestedIfItem key={item.id} step={item} depth={depth + 1} />
+      {items.map((item: Step, index: number) => {
+        const position = { isFirst: index === 0, isLast: index === items.length - 1 };
+        return item.type === "if" ? (
+          <View key={item.id} style={styles.nestedIfWrap}>
+            <IfCardNode step={item} depth={depth + 1} position={position} />
+          </View>
         ) : (
-          <BranchStepRow key={item.id} branch={item} />
-        ),
-      )}
+          <BranchStepRow key={item.id} branch={item} position={position} />
+        );
+      })}
+
       <View style={styles.branchAddRow}>
-        <Pressable style={styles.branchAdd} onPress={() => addBranchStep(step.id, branchKey)}>
+        <Pressable
+          style={styles.branchAdd}
+          onPress={() => setFocus(addBranchStep(step.id, branchKey))}
+          accessibilityRole="button"
+          accessibilityLabel="この分岐に工程を追加"
+        >
           <Text style={styles.branchAddText}>＋工程</Text>
         </Pressable>
-        <Pressable style={styles.branchAdd} onPress={() => addBranchIfStep(step.id, branchKey)}>
+        <Pressable
+          style={styles.branchAdd}
+          onPress={() => setFocus(addBranchIfStep(step.id, branchKey))}
+          accessibilityRole="button"
+          accessibilityLabel="この分岐にif分岐を追加"
+        >
           <Text style={styles.branchAddText}>＋🔀if</Text>
         </Pressable>
       </View>
@@ -101,40 +117,45 @@ function BranchColumn({ step, branchKey, depth }: { step: IfStep; branchKey: Bra
   );
 }
 
-function NestedIfItem({ step, depth }: { step: IfStep; depth: number }) {
-  const deleteStep = useNotebooks((s) => s.deleteStep);
-  return (
-    <View style={styles.nestedIfWrap}>
-      <IfCardNode step={step} depth={depth} onDelete={() => deleteStep(step.id)} />
-    </View>
-  );
-}
-
-function BranchStepRow({ branch }: { branch: NormalStep }) {
+function BranchStepRow({ branch, position }: { branch: NormalStep; position: Position }) {
   const setStepText = useNotebooks((s) => s.setStepText);
   const toggleStep = useNotebooks((s) => s.toggleStep);
   const deleteStep = useNotebooks((s) => s.deleteStep);
+  const focusId = useUi((s) => s.focusId);
+  const setFocus = useUi((s) => s.setFocus);
 
   return (
     <View style={styles.branchStep}>
       <Pressable
         style={[styles.bcheck, branch.done && styles.bcheckDone]}
         onPress={() => toggleStep(branch.id)}
-        hitSlop={4}
+        hitSlop={8}
+        accessibilityRole="checkbox"
+        accessibilityState={{ checked: branch.done }}
+        accessibilityLabel={branch.text.trim() || "空の工程"}
       >
         <Text style={[styles.bcheckMark, branch.done && styles.bcheckMarkDone]}>{branch.done ? "✓" : ""}</Text>
       </Pressable>
+
       <TextInput
         value={branch.text}
         onChangeText={(t) => setStepText(branch.id, t)}
         multiline
         placeholder="工程を入力…"
-        placeholderTextColor="rgba(90,77,112,0.4)"
+        placeholderTextColor={colors.placeholder}
+        autoFocus={focusId === branch.id}
+        onFocus={() => focusId === branch.id && setFocus(null)}
+        accessibilityLabel="工程の内容"
         style={[styles.branchText, branch.done && styles.branchTextDone]}
       />
-      <Pressable onPress={() => deleteStep(branch.id)} hitSlop={4}>
-        <Text style={styles.branchDel}>✕</Text>
-      </Pressable>
+
+      <StepActions
+        stepId={branch.id}
+        isFirst={position.isFirst}
+        isLast={position.isLast}
+        compact
+        onDelete={() => deleteStep(branch.id)}
+      />
     </View>
   );
 }
@@ -142,74 +163,58 @@ function BranchStepRow({ branch }: { branch: NormalStep }) {
 const styles = StyleSheet.create({
   card: {
     width: "100%",
-    backgroundColor: "#fff8ef",
+    backgroundColor: colors.ifCard.bg,
     borderWidth: 1.5,
-    borderColor: "#d9a441",
+    borderColor: colors.ifCard.border,
     borderStyle: "dashed",
     borderRadius: radii.card,
-    padding: 12,
-    boxShadow: "0 3px 10px rgba(90,70,110,0.1)",
+    padding: space.md,
+    boxShadow: shadows.card,
   },
   cardTop: {
     maxWidth: 420,
     alignSelf: "center",
   },
   cardNested: {
-    padding: 10,
+    padding: space.sm + 2,
   },
   cardNest1: {
-    backgroundColor: "#faf5ff",
-    borderColor: "#c9a0d9",
+    backgroundColor: colors.ifCardNest1.bg,
+    borderColor: colors.ifCardNest1.border,
   },
   cardNest2: {
-    backgroundColor: "#f2f8ff",
-    borderColor: "#a3c9e0",
+    backgroundColor: colors.ifCardNest2.bg,
+    borderColor: colors.ifCardNest2.border,
   },
   head: {
     flexDirection: "row",
     alignItems: "flex-start",
     gap: 6,
-    marginBottom: 10,
+    marginBottom: space.sm,
   },
   ifIcon: {
-    fontFamily: fonts.body,
-    fontSize: 13,
+    ...text.body,
     marginTop: 3,
   },
   cond: {
     flex: 1,
-    fontFamily: fonts.body,
+    ...text.body,
     fontSize: 14,
     color: colors.ink,
-    lineHeight: 20,
     padding: 0,
   },
-  actions: {
-    alignItems: "center",
-    gap: 2,
-  },
-  icon: {
-    fontSize: 12,
-    color: "#b5a8c4",
-    paddingVertical: 2,
-  },
-  iconHidden: {
-    opacity: 0,
-  },
-  // スマホ幅では「はい／いいえ」を縦積みにして、ネストが深くても横幅で潰れないようにする。
   branches: {
-    gap: 10,
+    gap: space.sm,
   },
   branch: {
     width: "100%",
     backgroundColor: "rgba(255,255,255,0.6)",
-    borderRadius: 12,
-    padding: 8,
+    borderRadius: radii.small,
+    padding: space.sm,
     gap: 6,
   },
   branchLabel: {
-    fontFamily: fonts.bodyBold,
-    fontSize: 12,
+    ...text.labelBold,
     color: colors.plum,
     textAlign: "center",
     padding: 2,
@@ -222,9 +227,9 @@ const styles = StyleSheet.create({
     alignItems: "flex-start",
     gap: 5,
     backgroundColor: colors.paper,
-    borderRadius: 10,
+    borderRadius: radii.small,
     paddingVertical: 7,
-    paddingHorizontal: 8,
+    paddingHorizontal: space.sm,
     boxShadow: "0 2px 6px rgba(90,70,110,0.08)",
   },
   bcheck: {
@@ -250,20 +255,15 @@ const styles = StyleSheet.create({
   },
   branchText: {
     flex: 1,
-    fontFamily: fonts.body,
+    ...text.caption,
     fontSize: 12.5,
-    color: colors.ink,
     lineHeight: 18,
+    color: colors.ink,
     padding: 0,
   },
   branchTextDone: {
     opacity: 0.55,
     textDecorationLine: "line-through",
-  },
-  branchDel: {
-    fontSize: 10,
-    color: "#b5a8c4",
-    paddingTop: 2,
   },
   branchAddRow: {
     flexDirection: "row",
@@ -273,15 +273,14 @@ const styles = StyleSheet.create({
   },
   branchAdd: {
     borderWidth: 1,
-    borderColor: "rgba(155,130,180,0.4)",
+    borderColor: colors.dashed,
     borderStyle: "dashed",
-    borderRadius: 10,
-    paddingVertical: 4,
-    paddingHorizontal: 10,
+    borderRadius: radii.small,
+    paddingVertical: 5,
+    paddingHorizontal: space.sm + 2,
   },
   branchAddText: {
-    fontFamily: fonts.body,
-    fontSize: 11,
-    color: "#9b7fb8",
+    ...text.caption,
+    color: colors.lavenderDeep,
   },
 });

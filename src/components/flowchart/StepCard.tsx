@@ -1,25 +1,41 @@
 import { useState } from "react";
 import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
-import { colors, fonts, radii } from "@/lib/theme";
+import { successFeedback } from "@/lib/haptics";
+import { colors, radii, shadows, space, text } from "@/lib/theme";
 import { useNotebooks } from "@/state/notebooks";
+import { useUi } from "@/state/ui";
 import type { NormalStep } from "@/lib/types";
 import { Confetti } from "./Confetti";
+import { StepActions } from "./StepActions";
 
 export function StepCard({ step, index, count }: { step: NormalStep; index: number; count: number }) {
   const setStepText = useNotebooks((s) => s.setStepText);
   const toggleStep = useNotebooks((s) => s.toggleStep);
-  const moveStep = useNotebooks((s) => s.moveStep);
   const deleteStep = useNotebooks((s) => s.deleteStep);
+  const focusId = useUi((s) => s.focusId);
+  const setFocus = useUi((s) => s.setFocus);
   const [burst, setBurst] = useState(0);
 
   const onCheck = () => {
     const nowDone = toggleStep(step.id);
-    if (nowDone) setBurst((b) => b + 1);
+    if (nowDone) {
+      setBurst((b) => b + 1);
+      successFeedback();
+    }
   };
+
+  const label = step.text.trim() || "空の工程";
 
   return (
     <View style={[styles.card, step.done && styles.cardDone]}>
-      <Pressable style={[styles.check, step.done && styles.checkDone]} onPress={onCheck} hitSlop={4}>
+      <Pressable
+        style={[styles.check, step.done && styles.checkDone]}
+        onPress={onCheck}
+        hitSlop={8}
+        accessibilityRole="checkbox"
+        accessibilityState={{ checked: step.done }}
+        accessibilityLabel={label}
+      >
         <Text style={[styles.checkMark, step.done && styles.checkMarkDone]}>{step.done ? "✓" : ""}</Text>
       </Pressable>
 
@@ -29,23 +45,21 @@ export function StepCard({ step, index, count }: { step: NormalStep; index: numb
           onChangeText={(t) => setStepText(step.id, t)}
           multiline
           placeholder="工程を入力…"
-          placeholderTextColor="rgba(90,77,112,0.4)"
+          placeholderTextColor={colors.placeholder}
+          autoFocus={focusId === step.id}
+          onFocus={() => focusId === step.id && setFocus(null)}
+          accessibilityLabel="工程の内容"
           style={[styles.text, step.done && styles.textDone]}
         />
         {step.done ? <View style={styles.strike} pointerEvents="none" /> : null}
       </View>
 
-      <View style={styles.actions}>
-        <Pressable onPress={() => moveStep(index, -1)} disabled={index === 0} hitSlop={4}>
-          <Text style={[styles.icon, index === 0 && styles.iconHidden]}>▲</Text>
-        </Pressable>
-        <Pressable onPress={() => moveStep(index, 1)} disabled={index === count - 1} hitSlop={4}>
-          <Text style={[styles.icon, index === count - 1 && styles.iconHidden]}>▼</Text>
-        </Pressable>
-        <Pressable onPress={() => deleteStep(step.id)} hitSlop={4}>
-          <Text style={styles.icon}>✕</Text>
-        </Pressable>
-      </View>
+      <StepActions
+        stepId={step.id}
+        isFirst={index === 0}
+        isLast={index === count - 1}
+        onDelete={() => deleteStep(step.id)}
+      />
 
       {burst > 0 ? <Confetti key={burst} /> : null}
     </View>
@@ -59,15 +73,15 @@ const styles = StyleSheet.create({
     alignSelf: "center",
     backgroundColor: colors.paper,
     borderRadius: radii.card,
-    paddingVertical: 12,
-    paddingHorizontal: 12,
+    paddingVertical: space.md,
+    paddingHorizontal: space.md,
     flexDirection: "row",
     alignItems: "flex-start",
-    gap: 8,
-    boxShadow: "0 3px 10px rgba(90,70,110,0.1)",
+    gap: space.sm,
+    boxShadow: shadows.card,
   },
   cardDone: {
-    backgroundColor: "#f4f1e8",
+    backgroundColor: colors.stepDone,
   },
   check: {
     width: 26,
@@ -96,10 +110,8 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   text: {
-    fontFamily: fonts.body,
-    fontSize: 15,
+    ...text.bodyL,
     color: colors.ink,
-    lineHeight: 22,
     padding: 0,
     margin: 0,
   },
@@ -114,17 +126,5 @@ const styles = StyleSheet.create({
     height: 2,
     backgroundColor: colors.rose,
     borderRadius: 2,
-  },
-  actions: {
-    alignItems: "center",
-    gap: 2,
-  },
-  icon: {
-    fontSize: 12,
-    color: "#b5a8c4",
-    paddingVertical: 2,
-  },
-  iconHidden: {
-    opacity: 0,
   },
 });

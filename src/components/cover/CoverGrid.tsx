@@ -1,50 +1,95 @@
 import { Pressable, StyleSheet, Text, View } from "react-native";
-import { colors, fonts, radii } from "@/lib/theme";
+import Animated, { FadeInDown } from "react-native-reanimated";
 import { notebookDisplayName } from "@/lib/model";
+import { colors, radii, shadows, space, text } from "@/lib/theme";
 import type { Notebook } from "@/lib/types";
+import { IconButton } from "@/components/ui/kit";
+import { COVER_ASPECT, CoverArt } from "./CoverArt";
+
+const ACTION_BAR_HEIGHT = 36;
+
+function CoverCard({
+  notebook,
+  index,
+  onOpen,
+  onRename,
+  onDuplicate,
+  onDelete,
+}: {
+  notebook: Notebook;
+  index: number;
+  onOpen: () => void;
+  onRename: () => void;
+  onDuplicate: () => void;
+  onDelete: () => void;
+}) {
+  const name = notebookDisplayName(notebook);
+
+  return (
+    <Animated.View style={styles.cell} entering={FadeInDown.delay(index * 45).duration(260)}>
+      <Pressable
+        style={({ pressed }) => [styles.card, pressed && styles.cardPressed]}
+        onPress={onOpen}
+        accessibilityRole="button"
+        accessibilityLabel={`${name}を開く`}
+      >
+        <CoverArt
+          name={name}
+          type={notebook.type}
+          color={notebook.color}
+          pageCount={notebook.pages.length}
+          bottomInset={ACTION_BAR_HEIGHT}
+        />
+        <View style={styles.actions}>
+          <IconButton icon="✏️" label={`${name}の名前を変える`} size={28} onPress={onRename} />
+          <IconButton icon="📄" label={`${name}をコピー`} size={28} onPress={onDuplicate} />
+          <IconButton icon="✕" label={`${name}を削除`} size={28} tone="rose" onPress={onDelete} />
+        </View>
+      </Pressable>
+    </Animated.View>
+  );
+}
 
 export function CoverGrid({
   notebooks,
   onOpen,
   onRename,
+  onDuplicate,
   onDelete,
   onAdd,
 }: {
   notebooks: Notebook[];
   onOpen: (id: string) => void;
   onRename: (id: string) => void;
+  onDuplicate: (id: string) => void;
   onDelete: (id: string) => void;
   onAdd: () => void;
 }) {
   return (
     <View style={styles.grid}>
-      {notebooks.map((nb) => (
-        <View key={nb.id} style={styles.cell}>
-          <View style={[styles.card, { backgroundColor: nb.color }]}>
-            {}
-            <Pressable style={StyleSheet.absoluteFill} onPress={() => onOpen(nb.id)} />
-            <View style={styles.badge} pointerEvents="none">
-              <Text style={styles.badgeText}>{nb.type === "notestyle" ? "📓" : "📔"}</Text>
-            </View>
-            <Pressable style={[styles.corner, styles.edit]} onPress={() => onRename(nb.id)} hitSlop={6}>
-              <Text style={styles.cornerText}>✏️</Text>
-            </Pressable>
-            <Pressable style={[styles.corner, styles.del]} onPress={() => onDelete(nb.id)} hitSlop={6}>
-              <Text style={styles.cornerText}>✕</Text>
-            </Pressable>
-            <Text style={styles.name} numberOfLines={3} pointerEvents="none">
-              {notebookDisplayName(nb)}
-            </Text>
-          </View>
-        </View>
+      {notebooks.map((nb, index) => (
+        <CoverCard
+          key={nb.id}
+          notebook={nb}
+          index={index}
+          onOpen={() => onOpen(nb.id)}
+          onRename={() => onRename(nb.id)}
+          onDuplicate={() => onDuplicate(nb.id)}
+          onDelete={() => onDelete(nb.id)}
+        />
       ))}
 
-      <Pressable style={styles.cell} onPress={onAdd}>
-        <View style={styles.addCard}>
+      <Animated.View style={styles.cell} entering={FadeInDown.delay(notebooks.length * 45).duration(260)}>
+        <Pressable
+          style={({ pressed }) => [styles.addCard, pressed && styles.cardPressed]}
+          onPress={onAdd}
+          accessibilityRole="button"
+          accessibilityLabel="新しい手帳をつくる"
+        >
           <Text style={styles.addPlus}>＋</Text>
           <Text style={styles.addLabel}>新しい手帳</Text>
-        </View>
-      </Pressable>
+        </Pressable>
+      </Animated.View>
     </View>
   );
 }
@@ -53,77 +98,53 @@ const styles = StyleSheet.create({
   grid: {
     flexDirection: "row",
     flexWrap: "wrap",
-    gap: 16,
+    gap: space.lg,
   },
   cell: {
     width: "47%",
     flexGrow: 1,
-    aspectRatio: 3 / 4,
+    aspectRatio: COVER_ASPECT,
   },
   card: {
     flex: 1,
     borderRadius: radii.card,
-    padding: 14,
+    overflow: "hidden",
+    boxShadow: shadows.raised,
+  },
+  cardPressed: {
+    opacity: 0.9,
+  },
+  actions: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    bottom: 0,
+    height: ACTION_BAR_HEIGHT,
+    flexDirection: "row",
     justifyContent: "flex-end",
-    boxShadow: "0 4px 14px rgba(90,70,110,0.18)",
-  },
-  badge: {
-    position: "absolute",
-    top: 10,
-    left: 10,
-    width: 30,
-    height: 30,
-    borderRadius: 15,
-    backgroundColor: "rgba(255,255,255,0.35)",
     alignItems: "center",
-    justifyContent: "center",
-  },
-  badgeText: {
-    fontSize: 16,
-  },
-  corner: {
-    position: "absolute",
-    top: 8,
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    backgroundColor: "rgba(255,255,255,0.55)",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  edit: {
-    right: 36,
-  },
-  del: {
-    right: 8,
-  },
-  cornerText: {
-    fontSize: 11,
-    color: colors.plum,
-  },
-  name: {
-    fontFamily: fonts.display,
-    fontSize: 16,
-    color: colors.white,
+    gap: space.xs,
+    paddingHorizontal: space.sm,
+    backgroundColor: "rgba(255,255,255,0.22)",
   },
   addCard: {
     flex: 1,
     borderRadius: radii.card,
     borderWidth: 2,
-    borderColor: "rgba(155,130,180,0.5)",
+    borderColor: colors.dashedStrong,
     borderStyle: "dashed",
-    backgroundColor: "rgba(255,255,255,0.3)",
+    backgroundColor: colors.veilWeak,
     alignItems: "center",
     justifyContent: "center",
-    gap: 6,
+    gap: space.xs,
   },
   addPlus: {
-    fontSize: 24,
-    color: "#9b7fb8",
+    fontSize: 26,
+    lineHeight: 32,
+    color: colors.lavenderDeep,
   },
   addLabel: {
-    fontFamily: fonts.body,
-    fontSize: 12,
-    color: "#9b7fb8",
+    ...text.label,
+    color: colors.lavenderDeep,
   },
 });

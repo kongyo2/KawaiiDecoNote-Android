@@ -3,13 +3,19 @@ import { useEffect } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import Animated, { measure, runOnJS, useAnimatedRef, useAnimatedStyle, useSharedValue } from "react-native-reanimated";
-import { colors } from "@/lib/theme";
+import { colors, shadows } from "@/lib/theme";
 
 export interface TransformPatch {
   x?: number;
   y?: number;
   w?: number;
   rot?: number;
+}
+
+interface SecondaryAction {
+  icon: string;
+  label: string;
+  onPress: () => void;
 }
 
 interface TransformableProps {
@@ -28,6 +34,10 @@ interface TransformableProps {
   handleTint?: string;
   boundsWidth?: number | undefined;
   minY?: number;
+  // 読み上げ用の名前。「シール」「テキスト」など、何を掴んでいるかを伝える。
+  label?: string;
+  deleteLabel?: string;
+  secondaryAction?: SecondaryAction;
   onSelect: () => void;
   onChange: (patch: TransformPatch) => void;
   onDelete?: () => void;
@@ -36,6 +46,7 @@ interface TransformableProps {
 
 const HANDLE = 26;
 
+// つまみ（⠿）を上にはみ出させる分だけ、上端に確保しておく余白。
 export const GRIP_RESERVE = 15;
 
 function tintWithAlpha(hex: string): string {
@@ -60,6 +71,9 @@ export function Transformable({
   handleTint = colors.plum,
   boundsWidth,
   minY = 0,
+  label,
+  deleteLabel = "削除",
+  secondaryAction,
   onSelect,
   onChange,
   onDelete,
@@ -163,12 +177,23 @@ export function Transformable({
   return (
     <Animated.View ref={aref} style={[styles.root, selected ? styles.rootSelected : null, animStyle]}>
       <GestureDetector gesture={bodyGesture}>
-        <View style={styles.body}>{children}</View>
+        <View
+          style={styles.body}
+          accessible={label !== undefined}
+          accessibilityLabel={label}
+          accessibilityState={{ selected }}
+        >
+          {children}
+        </View>
       </GestureDetector>
 
       {showDragHandle ? (
         <GestureDetector gesture={drag}>
-          <View style={[styles.grip, { backgroundColor: tintWithAlpha(handleTint) }]}>
+          <View
+            style={[styles.grip, { backgroundColor: tintWithAlpha(handleTint) }]}
+            accessible
+            accessibilityLabel={label ? `${label}を動かす` : "動かす"}
+          >
             <Text style={[styles.gripText, { color: handleTint }]}>⠿</Text>
           </View>
         </GestureDetector>
@@ -176,7 +201,11 @@ export function Transformable({
 
       {selected && rotatable ? (
         <GestureDetector gesture={rotate}>
-          <View style={[styles.handle, styles.rotateHandle, { borderColor: handleTint }]}>
+          <View
+            style={[styles.handle, styles.rotateHandle, { borderColor: handleTint }]}
+            accessible
+            accessibilityLabel="ドラッグして回す"
+          >
             <Text style={[styles.handleText, { color: handleTint }]}>↻</Text>
           </View>
         </GestureDetector>
@@ -184,14 +213,36 @@ export function Transformable({
 
       {selected && resizable ? (
         <GestureDetector gesture={resize}>
-          <View style={[styles.handle, styles.resizeHandle, { borderColor: handleTint }]}>
+          <View
+            style={[styles.handle, styles.resizeHandle, { borderColor: handleTint }]}
+            accessible
+            accessibilityLabel="ドラッグして大きさを変える"
+          >
             <Text style={[styles.handleText, { color: handleTint }]}>⤡</Text>
           </View>
         </GestureDetector>
       ) : null}
 
+      {selected && secondaryAction ? (
+        <Pressable
+          style={[styles.secondary, { borderColor: handleTint }]}
+          onPress={secondaryAction.onPress}
+          hitSlop={8}
+          accessibilityRole="button"
+          accessibilityLabel={secondaryAction.label}
+        >
+          <Text style={[styles.secondaryText, { color: handleTint }]}>{secondaryAction.icon}</Text>
+        </Pressable>
+      ) : null}
+
       {selected && onDelete ? (
-        <Pressable style={styles.delete} onPress={onDelete} hitSlop={6}>
+        <Pressable
+          style={styles.delete}
+          onPress={onDelete}
+          hitSlop={8}
+          accessibilityRole="button"
+          accessibilityLabel={deleteLabel}
+        >
           <Text style={styles.deleteText}>✕</Text>
         </Pressable>
       ) : null}
@@ -215,9 +266,9 @@ const styles = StyleSheet.create({
     position: "absolute",
     left: "50%",
     marginLeft: -18,
-    top: -15,
+    top: -GRIP_RESERVE,
     width: 36,
-    height: 15,
+    height: GRIP_RESERVE,
     borderTopLeftRadius: 6,
     borderTopRightRadius: 6,
     alignItems: "center",
@@ -237,7 +288,7 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     alignItems: "center",
     justifyContent: "center",
-    boxShadow: "0 2px 6px rgba(0,0,0,0.25)",
+    boxShadow: shadows.handle,
   },
   rotateHandle: {
     left: -13,
@@ -249,6 +300,24 @@ const styles = StyleSheet.create({
   },
   handleText: {
     fontSize: 13,
+    fontWeight: "700",
+  },
+  secondary: {
+    position: "absolute",
+    top: -10,
+    left: -10,
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: colors.white,
+    borderWidth: 1.5,
+    alignItems: "center",
+    justifyContent: "center",
+    zIndex: 5,
+  },
+  secondaryText: {
+    fontSize: 12,
+    lineHeight: 14,
     fontWeight: "700",
   },
   delete: {
